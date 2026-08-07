@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工艺组态 · MaxChemical</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--accent:#A41626;--ink:#14161c;--line:#e2e5ea}
+    html,body{height:100%}
+    body{font-family:'Public Sans','Noto Sans SC',system-ui,sans-serif;background:#f6f7f9;color:var(--ink)}
+    .wrap{height:100vh;display:flex;flex-direction:column}
+    .bar{height:52px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 18px;background:#fff;border-bottom:1px solid var(--line);z-index:5}
+    .bar .back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#4a5060;text-decoration:none;padding:6px 10px;border-radius:8px}
+    .bar .back:hover{background:#f0f1f4}
+    .bar .t{font-size:15px;font-weight:600}
+    .bar .sub{font-size:12px;color:#8a8f99}
+    .bar .sp{flex:1}
+    .bar .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px}
+    .pill.live{color:#1d8a4a;background:rgba(45,190,110,.12)}
+    .pill.idle{color:#8a8f99;background:#eef0f3}
+    .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+    .pill.live .dot{animation:pulse 1.4s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .zoom{display:flex;align-items:center;gap:4px}
+    .zoom button{width:28px;height:28px;border:1px solid var(--line);background:#fff;border-radius:7px;font-size:15px;cursor:pointer;color:#4a5060}
+    .zoom button:hover{background:#f0f1f4}
+    .zoom .lvl{font-size:12px;color:#8a8f99;min-width:42px;text-align:center}
+    .stage-scroll{flex:1;overflow:auto;padding:14px;display:flex;align-items:flex-start;justify-content:flex-start}
+    .stage{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px -24px rgba(20,22,28,.4);transform-origin:top left}
+    .stage svg{display:block}
+    .loading{color:#8a8f99;font-size:14px;padding:60px}
+    /* 实时值:与桌面一致用黑色显示(不再变绿) */
+    text.live-on{fill:#1A1A1A !important}
+    /* 管路流体动画(云端重建:桌面 Storyboard 不会随 SVG 导出)*/
+    @keyframes pipeflow{to{stroke-dashoffset:-32}}
+    .flow-anim{stroke-dasharray:7 7;animation:pipeflow .9s linear infinite}
+    .flow-fluid{stroke-linecap:butt;animation:pipeflow 1s linear infinite}
+    .flow-fluid.rev{animation-direction:reverse}
+    /* 默认流动样式(赛博流光):对导出的流光描边虚线补 stroke-dashoffset 动画 */
+    .flow-stroke{animation:pipeflow 1s linear infinite}
+    .flow-stroke.rev{animation-direction:reverse}
+
+    /* 手机横屏 / 窄屏适配 */
+    @media (max-height:520px),(max-width:920px){
+      .bar{height:42px;padding:0 10px;gap:8px}
+      .bar .t{font-size:13px}
+      .bar .sub{display:none}
+      .stage-scroll{padding:8px}
+      .doe{top:42px;width:100vw;max-width:100vw}
+      .chart{max-width:min(92vw,420px)}
+    }
+
+    /* ===== DOE 面板(实验多组执行 · 远程填结果)===== */
+    .bar .doe-toggle{display:none;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:#fff;color:#4a5060;cursor:pointer}
+    .bar .doe-toggle.on{display:inline-flex}
+    .bar .doe-toggle.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .bar .doe-toggle .badge{min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#eef0f3;color:#4a5060;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+    .bar .doe-toggle.active .badge{background:rgba(255,255,255,.25);color:#fff}
+    .doe{position:fixed;top:52px;right:0;bottom:0;width:380px;max-width:92vw;background:#fff;border-left:1px solid var(--line);box-shadow:-16px 0 40px -28px rgba(20,22,28,.5);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease;z-index:20}
+    .doe.show{transform:translateX(0)}
+    .doe .dh{padding:14px 16px;border-bottom:1px solid var(--line)}
+    .doe .dh .bn{font-size:14px;font-weight:700}
+    .doe .dh .bs{font-size:12px;color:#8a8f99;margin-top:2px}
+    .doe .prog{height:6px;border-radius:999px;background:#eef0f3;margin-top:10px;overflow:hidden}
+    .doe .prog>i{display:block;height:100%;background:linear-gradient(90deg,#2dbe6e,#1d8a4a);width:0;transition:width .3s}
+    .doe .body{flex:1;overflow:auto;padding:12px 16px}
+    /* 远程填结果表单 */
+    .doe .ask{border:1px solid var(--accent);border-radius:10px;padding:12px;margin-bottom:14px;background:rgba(164,22,38,.03)}
+    .doe .ask h4{font-size:13px;color:var(--accent);margin-bottom:2px}
+    .doe .ask .fac{font-size:12px;color:#6a707c;margin-bottom:10px;line-height:1.5}
+    .doe .ask .fld{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+    .doe .ask .fld label{flex:1;font-size:13px}
+    .doe .ask .fld .u{font-size:11px;color:#8a8f99;min-width:24px}
+    .doe .ask input{width:110px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:inherit}
+    .doe .ask input:focus{outline:none;border-color:var(--accent)}
+    .doe .ask button{margin-top:6px;width:100%;padding:8px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+    .doe .ask button:disabled{opacity:.5;cursor:default}
+    .doe .ask .hint{font-size:11px;color:#8a8f99;margin-top:6px;text-align:center}
+    /* 运行表 */
+    table.runs{width:100%;border-collapse:collapse;font-size:12px}
+    table.runs th,table.runs td{padding:6px 7px;text-align:left;border-bottom:1px solid #f0f1f4;white-space:nowrap}
+    table.runs th{color:#8a8f99;font-weight:600;position:sticky;top:0;background:#fff}
+    table.runs td.num{text-align:right;font-variant-numeric:tabular-nums}
+    table.runs tr.cur{background:rgba(164,22,38,.07)}
+    .st{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600}
+    .st.Completed{color:#1d8a4a;background:rgba(45,190,110,.14)}
+    .st.Running,.st.WaitingResponse{color:#b06a00;background:rgba(240,160,0,.15)}
+    .st.Pending{color:#8a8f99;background:#eef0f3}
+    .st.Failed{color:#c0392b;background:rgba(192,57,43,.12)}
+    .st.Suspended,.st.Skipped{color:#8a8f99;background:#f0f1f4}
+
+    /* ===== 实时曲线面板(点数值节点弹出)===== */
+    text[data-val]{cursor:pointer}
+    text[data-val]:hover{fill:var(--accent) !important}
+    .chart{position:fixed;left:16px;top:80px;width:400px;max-width:94vw;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px -26px rgba(20,22,28,.5);z-index:25;display:none}
+    .chart.show{display:block}
+    .chart .ch{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line)}
+    .chart .ch .tt{font-size:13px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chart .ch .x{width:24px;height:24px;border:0;background:#f0f1f4;border-radius:6px;cursor:pointer;color:#4a5060;font-size:14px;line-height:1}
+    .chart .ch .x:hover{background:#e6e8ec}
+    .chart .plot{padding:8px 12px 2px}
+    .chart .plot svg{display:block;width:100%;height:auto}
+    .chart .chart-empty{height:170px;display:flex;align-items:center;justify-content:center;color:#8a8f99;font-size:13px}
+    .chart .stat{display:flex;gap:16px;padding:4px 14px 12px;font-size:12px;color:#6a707c}
+    .chart .stat b{color:#14161c;font-variant-numeric:tabular-nums}
+    .chart .stat .cur b{color:var(--accent)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar">
+      <a class="back" href="/" title="返回">← 返回</a>
+      <span class="t" id="pName">工艺组态</span>
+      <span class="sub" id="pSub">原图版 · 桌面组态 1:1</span>
+      <span class="sp"></span>
+      <div class="zoom">
+        <button id="zOut" title="缩小">−</button>
+        <span class="lvl" id="zLvl">适应</span>
+        <button id="zIn" title="放大">+</button>
+        <button id="zFit" title="适应窗口" style="width:auto;padding:0 8px;font-size:12px">适应</button>
+      </div>
+      <button class="doe-toggle" id="doeToggle" title="DOE 实验">DOE<span class="badge" id="doeBadge">0</span></button>
+      <span class="pill idle" id="livePill"><span class="dot"></span><span id="liveTxt">静态</span></span>
+    </div>
+    <div class="stage-scroll" id="scroll">
+      <div class="stage" id="stage"><div class="loading">正在加载工艺组态…</div></div>
+    </div>
+  </div>
+
+  <!-- DOE 面板:实验多组执行进度 + 远程填结果 -->
+  <aside class="doe" id="doePanel">
+    <div class="dh">
+      <div class="bn" id="doeName">DOE 实验</div>
+      <div class="bs" id="doeStatus">—</div>
+      <div class="prog"><i id="doeProg"></i></div>
+    </div>
+    <div class="body" id="doeBody"></div>
+  </aside>
+
+  <!-- 实时曲线面板:点工艺图上的数值节点弹出 -->
+  <div class="chart" id="chartPanel">
+    <div class="ch">
+      <span class="tt" id="chartTitle">曲线</span>
+      <button class="x" id="chartClose" title="关闭">×</button>
+    </div>
+    <div class="plot" id="chartPlot"></div>
+    <div class="stat">
+      <span class="cur">当前 <b id="chartCur">—</b></span>
+      <span>最小 <b id="chartMin">—</b></span>
+      <span>最大 <b id="chartMax">—</b></span>
+    </div>
+  </div>
+
+  <script src="mcp-sample.js"></script>
+  <script>
+  (function () {
+    const M = window.MCP || {};
+    const stage = document.getElementById('stage');
+    // 项目名以「服务器上真实上传的名字」为准,不再用前端样例名(mcp-sample.js 的 M.name 只作占位)
+    let procName = '';
+    function setProcName(n) {
+      const clean = (n || '').trim();
+      if (clean && clean !== 'default') procName = clean;   // default/空 = 桌面还没带项目名,查询用空串即可
+      document.getElementById('pName').textContent = (clean && clean !== 'default') ? clean : '工艺组态';
+    }
+    document.getElementById('pName').textContent = '工艺组态';
+
+    // 值节点索引:metricKey(卡片名|指标) -> <text> 值节点,用于实时原位刷新
+    const valueIndex = {};
+
+    // 在应用框架内嵌显示时(iframe),隐藏自身「返回」(用左侧菜单导航)
+    if (window.top !== window.self) { const bk = document.querySelector('.bar .back'); if (bk) bk.style.display = 'none'; }
+
+    const qn = () => encodeURIComponent(procName || '');
+    let liveStarted = false, currentVer = 0;
+
+    // 加载工艺图:优先桌面「上云」上传的最新版,失败回退静态 process.svg。可重复调用(用于自动重载)。
+    function loadProcess() {
+      return fetch('/web/process/svg?name=' + qn() + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.ok ? r.text() : fetch('process.svg', { cache: 'no-store' }).then(r2 => {
+          if (!r2.ok) throw new Error('svg ' + r2.status); return r2.text();
+        }))
+        .then(txt => {
+          for (const k in valueIndex) delete valueIndex[k];   // 重建前清空索引
+          stage.innerHTML = txt;
+          const svg = stage.querySelector('svg');
+          if (!svg) throw new Error('no svg');
+          svg.removeAttribute('width');
+          svg.removeAttribute('height');
+          cleanChrome(svg);     // 去掉设备宿主蓝色外框
+          animateFlow(svg);     // 重建管路/连接流体动画
+          buildValueIndex(svg);
+          tightenViewBox(svg);  // 按内容裁掉桌面画布四周空白,消除与菜单之间的空隙
+          fitToWindow();
+          if (!liveStarted) { liveStarted = true; startLive(); }
+        })
+        .catch(err => {
+          stage.innerHTML = '<div class="loading">工艺组态加载失败:' + err.message +
+            '<br><span style="font-size:12px">请先在桌面端「工艺设计器」按 Ctrl+U 上云</span></div>';
+        });
+    }
+
+    // 自动重载:桌面每次「上云」后版本号变化,网页无需手动刷新即更新
+    function pollVersion(seed) {
+      return fetch('/web/process/version?name=' + qn() + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d && d.name) setProcName(d.name);   // 用服务器返回的真实项目名显示 + 作后续查询键
+          const ts = (d && d.ts) || 0;
+          if (seed) { currentVer = ts; return; }
+          if (ts && ts !== currentVer) { currentVer = ts; loadProcess(); }
+        }).catch(() => {});
+    }
+    loadProcess().then(() => pollVersion(true)).then(() => setInterval(pollVersion, 3000));
+
+    // ---- 用桌面组态坐标(mcp-sample.js 的监控卡片)在渲染后的 SVG 里定位每个指标的值节点 ----
+    // 规律:指标名 label 文本在 (x,y),其数值文本恰在正下方 (x±2, y+8~13);卡片名在 label 左侧、y+4~9。
+    function buildValueIndex(svg) {
+      // 精确绑定优先:导出器给监控卡片数值文本打了 data-val="设备名|指标",直接按 key 建索引。
+      svg.querySelectorAll('text[data-val]').forEach(el => {
+        const key = el.getAttribute('data-val');
+        if (!key) return;
+        valueIndex[key] = el;
+        const bar = key.indexOf('|');
+        if (bar > 0) { el.dataset.card = key.slice(0, bar); el.dataset.metric = key.slice(bar + 1); }
+      });
+      // 兼容旧导出图(没有 data-val)时,再用几何猜测补齐未命中的指标。
+      const texts = [...svg.querySelectorAll('text')].map(el => {
+        const m = (el.getAttribute('transform') || '').match(/matrix\(([-0-9.eE ]+)\)/);
+        const n = m ? m[1].trim().split(/\s+/).map(Number) : [1, 0, 0, 1, 0, 0];
+        return { el, x: n[4], y: n[5], t: (el.textContent || '').trim() };
+      });
+      // 所有卡片用到的指标名
+      const metricSet = new Set();
+      (M.cards || []).forEach(c => (c.metrics || []).forEach(m => metricSet.add(m)));
+
+      texts.forEach(label => {
+        if (!metricSet.has(label.t)) return;                 // 只处理指标名标签
+        // 值节点:同 x、正下方一行(取最近的)
+        const val = texts
+          .filter(o => Math.abs(o.x - label.x) < 3 && o.y - label.y > 6 && o.y - label.y < 14)
+          .sort((a, b) => (a.y - label.y) - (b.y - label.y))[0];
+        if (!val) return;
+        // 卡片名节点:标签左侧、略微下移(#n 唯一名),取最近的
+        const name = texts
+          .filter(o => o !== label && o.x < label.x && o.y - label.y > 3 && o.y - label.y < 10 && label.x - o.x < 320)
+          .sort((a, b) => (label.x - a.x) - (label.x - b.x))[0];
+        const cardName = name ? name.t : label.t;
+        const key = cardName + '|' + label.t;
+        if (valueIndex[key]) return;          // 已有精确绑定(data-val)则不覆盖
+        valueIndex[key] = val.el;
+        val.el.dataset.metric = label.t;
+        val.el.dataset.card = cardName;
+      });
+
+      // 所有值节点可点 → 弹实时曲线
+      Object.keys(valueIndex).forEach(key => {
+        const el = valueIndex[key];
+        el.style.cursor = 'pointer';
+        el.onclick = () => openChart(key, el);
+      });
+    }
+
+    // ---- 去掉设备宿主的蓝色外框(#00008B、透明填充的圆角矩形 = 编辑器选中框)----
+    // 即使桌面导出器还没更新,云端也能保证工艺图干净。
+    function cleanChrome(svg) {
+      let n = 0;
+      svg.querySelectorAll('rect').forEach(r => {
+        const stroke = (r.getAttribute('stroke') || '').toUpperCase();
+        const fo = r.getAttribute('fill-opacity');
+        if (stroke === '#00008B' && (fo === '0' || fo === '0.0')) { r.remove(); n++; }
+      });
+      return n;
+    }
+
+    // ---- 重建管路流体动画 ----
+    // SVG 是静态快照,桌面的 Storyboard 不会被导出。这里做两件事:
+    // 1) 连接折线(红色 #A41626)加流动虚线,表达设备间流向(箭头已在导出里);
+    // 2) 管路内的流体色块(FluidBackground:调色板色 + 0.4~0.6 透明度)沿其长轴叠加
+    //    一条流动虚线,复用色块自身 transform → 与真实管路像素级对齐,还原"颜色+流向"。
+    const FLUID = new Set(['#F4C542', '#1EC1F4', '#40D890', '#FF6B6B', '#2263EB', '#2D5A45', '#3D5A80']);
+    const NS2 = 'http://www.w3.org/2000/svg';
+    function animateFlow(svg) {
+      // 默认流动样式(赛博流光):导出的流光描边虚线带 data-flow-stroke,直接补动画(方向随 PipeFlowDir)。
+      svg.querySelectorAll('[data-flow-stroke]').forEach(el => {
+        const dir = (el.getAttribute('data-flow-stroke') || '').toLowerCase();
+        el.classList.add('flow-stroke');
+        if (dir === 'righttoleft') el.classList.add('rev');
+      });
+      // 管路流体:识别导出图里的流体色块(调色板色 + 0.4~0.6 透明度),沿其长轴生成一条
+      // 流动虚线,复用色块自身 transform → 与真实管路对齐。置顶叠加(在管体之上),确保流动可见。
+      const flows = [];
+      svg.querySelectorAll('rect').forEach(r => {
+        const fill = (r.getAttribute('fill') || '').toUpperCase();
+        const op = r.getAttribute('fill-opacity');
+        if (!FLUID.has(fill) || !(op === '0.4' || op === '0.5' || op === '0.6')) return;
+        const w = parseFloat(r.getAttribute('width')) || 0, h = parseFloat(r.getAttribute('height')) || 0;
+        if (w < 3 && h < 3) return;
+        const tf = r.getAttribute('transform') || '';
+        const horiz = w >= h, thick = Math.max(2.5, (horiz ? h : w) * 0.7);
+        const line = document.createElementNS(NS2, 'line');
+        if (horiz) { line.setAttribute('x1', 0); line.setAttribute('y1', h / 2); line.setAttribute('x2', w); line.setAttribute('y2', h / 2); }
+        else { line.setAttribute('x1', w / 2); line.setAttribute('y1', 0); line.setAttribute('x2', w / 2); line.setAttribute('y2', h); }
+        line.setAttribute('stroke', fill);
+        line.setAttribute('stroke-opacity', '0.95');
+        line.setAttribute('stroke-width', thick);
+        const dash = Math.max(5, thick * 1.1);
+        line.setAttribute('stroke-dasharray', dash + ' ' + dash);
+        if (tf) line.setAttribute('transform', tf);
+        // 流向:导出器带了 data-flow-dir(每段管路的 FlowDirectionStr)就精确定向,否则默认沿局部 +轴
+        const dir = (r.getAttribute('data-flow-dir') || '').toLowerCase();
+        let rev = false;
+        if (dir === 'righttoleft') rev = horiz ? true : false;
+        else if (dir === 'lefttoright') rev = horiz ? false : true; // 竖直段 L2R 约定为向上(与桌面一致)
+        line.setAttribute('class', 'flow-fluid' + (rev ? ' rev' : ''));
+        flows.push(line);
+      });
+      // 层级:插到"连接折线/设备"之前 → 盖在管体之上,但在设备之下(否则流体会盖住设备)
+      const anchor = svg.querySelector('polyline[stroke="#A41626"]') || svg.querySelector('text[fill="#00008B"]');
+      flows.forEach(l => anchor ? svg.insertBefore(l, anchor) : svg.appendChild(l));
+    }
+
+    // ---- 按内容裁剪 viewBox:去掉桌面画布四周的空白边距(消除画布与菜单/边缘的空隙)----
+    function tightenViewBox(svg) {
+      try {
+        const bb = svg.getBBox();               // 所有内容的包围盒(用户坐标)
+        if (bb && bb.width > 1 && bb.height > 1) {
+          const pad = 12;                       // 留一点呼吸边距
+          svg.setAttribute('viewBox',
+            (bb.x - pad) + ' ' + (bb.y - pad) + ' ' + (bb.width + pad * 2) + ' ' + (bb.height + pad * 2));
+        }
+      } catch (e) { /* getBBox 不可用时保持原 viewBox */ }
+    }
+
+    // ---- 实时数据 ----
+    // 后端就绪后向 /web/process/telemetry 返回 { "卡片名|指标": 数值, ... };
+    // 未就绪(404/无数据)时保持桌面导出的原图不变。
+    let liveTimer = null;
+    function startLive() {
+      pollOnce();
+      liveTimer = setInterval(pollOnce, 3000);
+    }
+    async function pollOnce() {
+      try {
+        const r = await fetch('/web/process/telemetry?name=' + qn(), { cache: 'no-store' });
+        if (!r.ok) { setLive(false); return; }
+        const data = await r.json();
+        const map = (data && (data.values || data)) || {};
+        const total = Object.keys(map).length;
+        if (total) {
+          const hit = applyProcessValues(map);
+          setLive(true, hit, total);
+        } else { setLive(false); }
+      } catch (e) { setLive(false); }
+    }
+    // 供后端/桌面推送调用:传 { "卡片名|指标": 数值 };返回命中(成功刷新)的项数。
+    window.applyProcessValues = function (map) {
+      if (!map) return 0;
+      let hit = 0, miss = [];
+      Object.keys(map).forEach(k => {
+        const el = valueIndex[k];
+        if (!el) { miss.push(k); return; }
+        const v = map[k];
+        setValueText(el, (typeof v === 'number') ? v.toFixed(2) : String(v));
+        el.classList.add('live-on');
+        hit++;
+      });
+      // 诊断:遥测到了但一个都没命中 → 键对不上 SVG 节点(多半是导出图没有 data-val,需重编导出器再上云)
+      if (hit === 0 && miss.length) {
+        console.warn('[实时值] 收到', miss.length, '项但 0 命中。遥测键示例:', miss.slice(0, 5),
+          ' | SVG 可绑定键示例:', Object.keys(valueIndex).slice(0, 5));
+      }
+      return hit;
+    };
+    // 设值:数字变宽超过单元格(data-w)时,不缩字,而是「扩大区域」——
+    // 把该值列右侧的所有卡片元素整体右移 + 本列单元格与卡片外框加宽(等于重排,与桌面一致)。
+    function setValueText(el, text) {
+      el.textContent = text;
+      const budget = parseFloat(el.getAttribute('data-w'));
+      if (!(budget > 0) || !el.getComputedTextLength) return;
+      const nat = el.getComputedTextLength();
+      if (nat <= budget) return;
+      reflowExpand(el, nat - budget + 3);      // 扩大区域
+      el.setAttribute('data-w', nat + 3);      // 现在放得下,后续不再重复扩
+    }
+    function parseMatrix(n) {
+      const r = (n.getAttribute('transform') || '').match(/matrix\(([-0-9.eE ,]+)\)/);
+      if (!r) return null;
+      const p = r[1].trim().split(/[ ,]+/).map(Number);
+      return { a: p[0], b: p[1], c: p[2], d: p[3], e: p[4], f: p[5] };
+    }
+    function setMatrixE(n, m, e) { n.setAttribute('transform', 'matrix(' + m.a + ' ' + m.b + ' ' + m.c + ' ' + m.d + ' ' + e + ' ' + m.f + ')'); }
+    function reflowExpand(el, delta) {
+      const card = (el.getAttribute('data-val') || '').split('|')[0];
+      const svg = el.ownerSVGElement;
+      if (!card || !(delta > 0) || !svg) return;
+      const selfM = parseMatrix(el); if (!selfM) return;
+      const budget = parseFloat(el.getAttribute('data-w')) || 0;
+      const colRight = selfM.e + budget;   // 该值所在列的右边界(root 坐标)
+      const members = [...svg.querySelectorAll('[data-cardname]')].filter(n => n.getAttribute('data-cardname') === card);
+      // 卡片外框 = 最宽的 rect
+      let box = null, boxW = -1;
+      members.forEach(n => { if (n.tagName === 'rect') { const w = parseFloat(n.getAttribute('width')) || 0; if (w > boxW) { boxW = w; box = n; } } });
+      // 该列右侧的所有元素整体右移
+      members.forEach(n => {
+        if (n === box) return;
+        const m = parseMatrix(n); if (!m) return;
+        if (m.e > colRight - 0.5) setMatrixE(n, m, m.e + delta);
+      });
+      // 本列单元格背景(覆盖该值、右边界≈列右界的 rect)加宽
+      members.forEach(n => {
+        if (n === box || n.tagName !== 'rect') return;
+        const m = parseMatrix(n); if (!m) return;
+        const w = parseFloat(n.getAttribute('width')) || 0;
+        if (m.e <= selfM.e + 2 && m.e + w >= selfM.e - 2 && m.e + w <= colRight + 2)
+          n.setAttribute('width', w + delta);
+      });
+      // 卡片外框加宽
+      if (box) box.setAttribute('width', (parseFloat(box.getAttribute('width')) || 0) + delta);
+    }
+    function setLive(on, hit, total) {
+      const pill = document.getElementById('livePill');
+      pill.className = 'pill ' + (on ? 'live' : 'idle');
+      document.getElementById('liveTxt').textContent = on ? '实时' : '静态';
+      let sub = '原图版 · 桌面组态 1:1';
+      if (on) sub = (total != null)
+        ? ('原图版 · 实时数据 · 命中 ' + (hit || 0) + '/' + total + ' 项')
+        : '原图版 · 实时数据';
+      document.getElementById('pSub').textContent = sub;
+    }
+
+    // ---- DOE 实验面板(多组执行进度 + 远程填结果)----
+    // 桌面 CloudPushService 把 DOE 运行表推到 /web/process/doe;某组等待结果时带 waiting 块。
+    // 网页填好结果 POST /web/process/doe/response → 桌面 DOEBatchExecutor 取走并完成该组。
+    const doePanel = document.getElementById('doePanel');
+    const doeToggle = document.getElementById('doeToggle');
+    const doeBody = document.getElementById('doeBody');
+    let doeVer = 0, doeOpen = false, lastWaitKey = '', submitting = false;
+
+    doeToggle.onclick = () => { doeOpen = !doeOpen; doePanel.classList.toggle('show', doeOpen); doeToggle.classList.toggle('active', doeOpen); };
+
+    function startDoe() { pollDoeVersion(true).then(() => setInterval(pollDoeVersion, 2500)); }
+    function pollDoeVersion(seed) {
+      return fetch('/web/process/doe/version?name=' + qn() + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          const ts = (d && d.ts) || 0;
+          if (seed) { doeVer = ts; if (ts) loadDoe(); return; }
+          if (ts !== doeVer) { doeVer = ts; loadDoe(); }
+        }).catch(() => {});
+    }
+    function loadDoe() {
+      return fetch('/web/process/doe?name=' + qn() + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null).then(renderDoe).catch(() => {});
+    }
+
+    function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+    const fnum = v => (typeof v === 'number') ? (Math.round(v * 1000) / 1000) : (v == null ? '' : v);
+
+    function renderDoe(d) {
+      const runs = (d && d.runs) || [];
+      if (!d || !d.batchId || !runs.length) { doeToggle.classList.remove('on'); return; }
+      doeToggle.classList.add('on');
+
+      const done = runs.filter(r => r.status === 'Completed').length;
+      document.getElementById('doeBadge').textContent = done + '/' + runs.length;
+      document.getElementById('doeName').textContent = d.batchName || 'DOE 实验';
+      const statusText = { Running: '执行中', Completed: '已完成', Paused: '已暂停', Aborted: '已中止', Designing: '设计中', Ready: '就绪' }[d.status] || d.status || '';
+      document.getElementById('doeStatus').textContent = statusText + ' · 已完成 ' + done + '/' + runs.length + ' 组';
+      document.getElementById('doeProg').style.width = (runs.length ? (done / runs.length * 100) : 0) + '%';
+
+      doeBody.innerHTML = '';
+
+      // 远程填结果表单
+      const w = d.waiting;
+      if (w && Array.isArray(w.responses) && w.responses.length) {
+        const waitKey = d.batchId + '#' + w.runIndex;
+        if (waitKey !== lastWaitKey) { lastWaitKey = waitKey; submitting = false; if (!doeOpen) doeToggle.click(); } // 新的一组等待 → 自动弹出面板
+        const ask = el('div', 'ask');
+        ask.appendChild(el('h4', null, '第 ' + (w.runIndex + 1) + ' 组已跑完 · 请填写实验结果'));
+        if (w.factors && Object.keys(w.factors).length) {
+          ask.appendChild(el('div', 'fac', '本组因子:' + Object.entries(w.factors).map(([k, v]) => k + '=' + fnum(v)).join('  ·  ')));
+        }
+        const inputs = {};
+        w.responses.forEach(rp => {
+          const row = el('div', 'fld');
+          row.appendChild(el('label', null, rp.name));
+          const inp = el('input'); inp.type = 'number'; inp.step = 'any'; inp.placeholder = '测量值';
+          if (submitting) inp.disabled = true;
+          inputs[rp.name] = inp;
+          row.appendChild(inp);
+          row.appendChild(el('span', 'u', rp.unit || ''));
+          ask.appendChild(row);
+        });
+        const btn = el('button', null, submitting ? '已提交,等待桌面继续…' : '提交结果 → 继续下一组');
+        btn.disabled = submitting;
+        btn.onclick = () => {
+          const vals = {};
+          for (const k in inputs) {
+            const raw = inputs[k].value.trim();
+            if (raw === '' || isNaN(Number(raw))) { inputs[k].focus(); return; }
+            vals[k] = Number(raw);
+          }
+          submitting = true; btn.disabled = true; btn.textContent = '提交中…';
+          submitResponse(d.batchId, w.runIndex, vals).then(ok => {
+            btn.textContent = ok ? '已提交,等待桌面继续…' : '提交失败,点此重试';
+            if (!ok) { submitting = false; btn.disabled = false; }
+          });
+        };
+        ask.appendChild(btn);
+        ask.appendChild(el('div', 'hint', '也可在桌面弹窗填写,二者先到者生效。'));
+        doeBody.appendChild(ask);
+      } else {
+        lastWaitKey = '';
+      }
+
+      // 运行表
+      const facCols = (d.factors && d.factors.length) ? d.factors
+        : [...new Set(runs.flatMap(r => Object.keys(r.factors || {})))];
+      const respCols = (d.responses || []).map(x => x.name);
+      const table = el('table', 'runs');
+      const thead = el('tr');
+      thead.appendChild(el('th', null, '#'));
+      facCols.forEach(f => thead.appendChild(el('th', null, f)));
+      respCols.forEach(r => thead.appendChild(el('th', null, r)));
+      thead.appendChild(el('th', null, '状态'));
+      table.appendChild(thead);
+      runs.forEach(r => {
+        const tr = el('tr');
+        if (r.runIndex === d.currentRunIndex && (r.status === 'Running' || r.status === 'WaitingResponse')) tr.className = 'cur';
+        tr.appendChild(el('td', 'num', (r.runIndex + 1)));
+        facCols.forEach(f => tr.appendChild(el('td', 'num', fnum((r.factors || {})[f]))));
+        respCols.forEach(rc => tr.appendChild(el('td', 'num', fnum((r.responses || {})[rc]))));
+        const stTd = el('td'); stTd.appendChild(el('span', 'st ' + (r.status || ''), doeStatusLabel(r.status)));
+        tr.appendChild(stTd);
+        table.appendChild(tr);
+      });
+      doeBody.appendChild(table);
+    }
+    function doeStatusLabel(s) {
+      return { Pending: '待执行', Running: '执行中', WaitingResponse: '待填结果', Completed: '完成', Failed: '失败', Suspended: '挂起', Skipped: '跳过' }[s] || s || '';
+    }
+    async function submitResponse(batchId, runIndex, values) {
+      try {
+        const r = await fetch('/web/process/doe/response', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: procName || '', batchId, runIndex, values })
+        });
+        return r.ok;
+      } catch (e) { return false; }
+    }
+    startDoe();
+
+    // ---- 实时曲线(点数值节点弹出,拉历史 + 增量刷新,不丢数据)----
+    const chartPanel = document.getElementById('chartPanel');
+    let chartKey = null, chartSince = 0, chartData = [], chartTimer = null;
+    const NSC = 'http://www.w3.org/2000/svg';
+
+    document.getElementById('chartClose').onclick = closeChart;
+    function closeChart() {
+      chartKey = null;
+      if (chartTimer) { clearInterval(chartTimer); chartTimer = null; }
+      chartPanel.classList.remove('show');
+    }
+    function openChart(key, el) {
+      chartKey = key; chartSince = 0; chartData = [];
+      document.getElementById('chartTitle').textContent = key.replace('|', ' · ');
+      chartPanel.classList.add('show');
+      positionChart(el);
+      refreshChart();
+      if (chartTimer) clearInterval(chartTimer);
+      chartTimer = setInterval(refreshChart, 1500);
+    }
+    // 参考桌面 DetailPopup(Placement=Bottom):出现在被点节点正下方,越界则翻到上方/夹在视口内
+    function positionChart(el) {
+      const pw = chartPanel.offsetWidth || 400, ph = chartPanel.offsetHeight || 240;
+      const m = 10;
+      let left = m, top = m;
+      if (el && el.getBoundingClientRect) {
+        const r = el.getBoundingClientRect();
+        left = r.left;
+        top = r.bottom + 8;
+        if (left + pw > window.innerWidth - m) left = window.innerWidth - pw - m;
+        if (left < m) left = m;
+        if (top + ph > window.innerHeight - m) top = r.top - ph - 8; // 下方放不下 → 放上方
+        if (top < m) top = m;
+      }
+      chartPanel.style.left = left + 'px';
+      chartPanel.style.top = top + 'px';
+      chartPanel.style.bottom = 'auto';
+    }
+    async function refreshChart() {
+      if (!chartKey) return;
+      try {
+        const r = await fetch('/web/process/history?name=' + qn() + '&key=' + encodeURIComponent(chartKey) + '&since=' + chartSince, { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        const pts = (d && d.points) || [];
+        if (pts.length) {
+          for (const p of pts) chartData.push({ t: p[0], v: p[1] });
+          if (chartData.length > 600) chartData = chartData.slice(-600);
+          chartSince = chartData[chartData.length - 1].t;
+        }
+        drawChart();
+      } catch (e) { /* 静默 */ }
+    }
+    const fmtNum = x => {
+      const a = Math.abs(x);
+      if (a >= 1000) return x.toFixed(0);
+      if (a >= 10) return x.toFixed(1);
+      return x.toFixed(2);
+    };
+    const hms = t => { const d = new Date(t); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+    function drawChart() {
+      const plot = document.getElementById('chartPlot');
+      const cur = document.getElementById('chartCur'), mn = document.getElementById('chartMin'), mx = document.getElementById('chartMax');
+      if (chartData.length < 2) { plot.innerHTML = '<div class="chart-empty">采样中…</div>'; return; }
+      const vs = chartData.map(p => p.v), ts = chartData.map(p => p.t);
+      const vmin = Math.min(...vs), vmax = Math.max(...vs);
+      let ymin = vmin, ymax = vmax;
+      if (ymax - ymin < 1e-9) { ymin -= 1; ymax += 1; }
+      const yr = ymax - ymin; ymin -= yr * 0.08; ymax += yr * 0.08;
+      const xmin = ts[0], xmax = ts[ts.length - 1], xr = Math.max(1, xmax - xmin);
+
+      const W = 400, H = 190, mL = 46, mR = 12, mT = 10, mB = 22;
+      const plotW = W - mL - mR, plotH = H - mT - mB;
+      const px = t => mL + (t - xmin) / xr * plotW;
+      const py = v => mT + (1 - (v - ymin) / (ymax - ymin)) * plotH;
+
+      let g = '';
+      // Y 轴:4 条网格 + 值标签
+      const yN = 4;
+      for (let i = 0; i <= yN; i++) {
+        const val = ymin + (ymax - ymin) * i / yN, y = py(val);
+        g += '<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (W - mR) + '" y2="' + y.toFixed(1) + '" stroke="#eef0f3" stroke-width="1"/>';
+        g += '<text x="' + (mL - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" font-size="9" fill="#9aa0ac">' + esc(fmtNum(val)) + '</text>';
+      }
+      // X 轴:3 个时间标签
+      const xN = 3;
+      for (let i = 0; i <= xN; i++) {
+        const tt = xmin + xr * i / xN, x = px(tt);
+        g += '<line x1="' + x.toFixed(1) + '" y1="' + mT + '" x2="' + x.toFixed(1) + '" y2="' + (mT + plotH) + '" stroke="#f4f5f7" stroke-width="1"/>';
+        const anchor = i === 0 ? 'start' : (i === xN ? 'end' : 'middle');
+        g += '<text x="' + x.toFixed(1) + '" y="' + (H - 7) + '" text-anchor="' + anchor + '" font-size="9" fill="#9aa0ac">' + hms(tt) + '</text>';
+      }
+      // 轴线
+      g += '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + plotH) + '" stroke="#d7dae0" stroke-width="1"/>';
+      g += '<line x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + (W - mR) + '" y2="' + (mT + plotH) + '" stroke="#d7dae0" stroke-width="1"/>';
+
+      // 数据折线 + 面积
+      let dpath = '';
+      for (let i = 0; i < chartData.length; i++) dpath += (i ? 'L' : 'M') + px(chartData[i].t).toFixed(1) + ' ' + py(chartData[i].v).toFixed(1);
+      const last = chartData[chartData.length - 1];
+      const area = dpath + 'L' + px(last.t).toFixed(1) + ' ' + (mT + plotH) + 'L' + px(xmin).toFixed(1) + ' ' + (mT + plotH) + 'Z';
+
+      plot.innerHTML =
+        '<svg viewBox="0 0 ' + W + ' ' + H + '">' + g +
+        '<path d="' + area + '" fill="rgba(164,22,38,.07)"/>' +
+        '<path d="' + dpath + '" fill="none" stroke="#A41626" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<circle cx="' + px(last.t).toFixed(1) + '" cy="' + py(last.v).toFixed(1) + '" r="2.8" fill="#A41626"/>' +
+        '</svg>';
+      cur.textContent = fmtNum(last.v); mn.textContent = fmtNum(vmin); mx.textContent = fmtNum(vmax);
+    }
+
+    // ---- 缩放 ----
+    let scale = 1, fit = true;
+    const scroll = document.getElementById('scroll');
+    function apply() {
+      stage.style.transform = 'scale(' + scale + ')';
+      document.getElementById('zLvl').textContent = fit ? '适应' : Math.round(scale * 100) + '%';
+    }
+    function fitToWindow() {
+      const svg = stage.querySelector('svg'); if (!svg) return;
+      const vb = svg.viewBox.baseVal;
+      const availW = scroll.clientWidth - 28, availH = scroll.clientHeight - 28;
+      scale = Math.min(availW / vb.width, availH / vb.height, 1.6);
+      svg.style.width = vb.width + 'px'; svg.style.height = vb.height + 'px';
+      fit = true; apply();
+    }
+    document.getElementById('zIn').onclick = () => { fit = false; scale = Math.min(scale * 1.2, 4); apply(); };
+    document.getElementById('zOut').onclick = () => { fit = false; scale = Math.max(scale / 1.2, 0.2); apply(); };
+    document.getElementById('zFit').onclick = fitToWindow;
+    window.addEventListener('resize', () => { if (fit) fitToWindow(); });
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 减压阀:蝶形阀 + 调压弹簧顶 -->
+  <path d="M18 46 L50 64 L18 82 Z" fill="#ffffff" stroke="#2b3038" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M82 46 L50 64 L82 82 Z" fill="#ffffff" stroke="#2b3038" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="50" y1="34" x2="50" y2="64" stroke="#2b3038" stroke-width="3"/>
+  <path d="M34 34 Q50 14 66 34 Z" fill="#eef1f5" stroke="#2b3038" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="50" y1="14" x2="50" y2="6" stroke="#2b3038" stroke-width="3"/>
+  <circle cx="50" cy="6" r="3.5" fill="#A41626"/>
+</svg>

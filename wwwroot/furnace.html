@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>高温炉控制</title>
+<style>
+/* ============================================================
+   高温炉控制(宇电 AI)—— 数据接入:
+   /web/devices/{code}/telemetry + /control(?demo=1 或无 code 本地模拟)
+   标度:温度/P/段SP/段t 工程值(×10 在服务端档案处理);仪表仅 FC06 单写。
+   ============================================================ */
+:root{
+  --bg:#0D0D0E; --panel:#141416; --panel-2:#1C1C1F; --inset:#0A0A0B;
+  --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --amber:#E0394C; --brand-deep:#A41626; --amber-glow:rgba(224,57,76,.45);
+  --ink:#FFFFFF; --sub:#9A9A9E; --mute:#5E5E64; --future:#4A4A4E; --warn:#FF8A3D;
+  --font:'Inter','Noto Sans SC',-apple-system,'PingFang SC','Microsoft YaHei','Helvetica Neue',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{ width:100%; height:644px; overflow:hidden; font-family:var(--font); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
+#root{ width:100%; height:644px; background:var(--bg); overflow:hidden; }
+.screen{ height:644px; display:flex; flex-direction:column; }
+
+.top{ display:flex; align-items:center; gap:20px; padding:13px 22px; border-bottom:1px solid var(--line); position:relative; z-index:20; }
+.top .back{ color:var(--sub); text-decoration:none; font-size:12px; padding:4px 9px; border:1px solid var(--line); border-radius:6px; }
+.top .back:hover{ border-color:var(--line-2); color:var(--ink); }
+.top .lead{ display:flex; align-items:center; gap:11px; }
+.abar{ width:3px; height:18px; background:var(--amber); border-radius:2px; } .subttl{ font-size:12px; color:var(--sub); font-weight:400; letter-spacing:.5px; }
+.top .title{ font-size:15px; font-weight:600; letter-spacing:1.5px; }
+.seg2{ display:flex; background:var(--panel-2); border-radius:6px; padding:3px; }
+.seg2 .opt{ padding:7px 16px; font-size:13px; font-weight:400; color:var(--sub); border-radius:4px; cursor:pointer; user-select:none; transition:all .2s; }
+.seg2 .opt.on{ background:var(--amber); color:#FFFFFF; font-weight:600; }
+.top .spacer{ flex:1; }
+.top .link{ font-size:11px; color:var(--mute); }
+.top .link.on{ color:#3ecf7a; }
+.top .st{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; }
+.top .st .dot{ width:8px; height:8px; border-radius:50%; background:var(--amber); box-shadow:0 0 8px var(--amber-glow); }
+.top .st.idle .dot{ background:var(--mute); box-shadow:none; }
+.top .st.at .dot{ background:var(--warn); box-shadow:0 0 8px rgba(255,138,61,.5); }
+
+.content{ flex:1; min-height:0; display:flex; }
+
+.chart{ position:relative; flex:1; min-width:0; border-right:1px solid var(--line); }
+.chart svg{ width:100%; height:100%; display:block; }
+.bigtemp{ position:absolute; top:16px; left:24px; pointer-events:none; }
+.bigtemp .v{ font-size:56px; font-weight:600; color:var(--amber); line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-1px; }
+.bigtemp .u{ font-size:22px; font-weight:500; color:var(--amber); }
+.bigtemp .lab{ font-size:11px; font-weight:400; color:var(--sub); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+.reg{ font-size:10px; color:var(--mute); font-weight:400; margin-left:5px; letter-spacing:.3px; }
+.side{ width:248px; display:flex; flex-direction:column; padding:18px 20px; }
+.srow{ padding:13px 0; border-bottom:1px solid var(--line); }
+.srow:first-child{ padding-top:0; }
+.srow .k{ font-size:12px; color:var(--sub); }
+.srow .big{ display:flex; align-items:baseline; gap:6px; margin-top:5px; }
+.srow .big .v{ font-size:28px; font-weight:600; font-variant-numeric:tabular-nums; }
+.srow .big .v.amber{ color:var(--amber); } .srow .big .u{ font-size:13px; color:var(--sub); }
+.svset{ display:flex; align-items:baseline; gap:6px; }
+.svset .v{ font-size:34px; font-weight:600; color:var(--amber); line-height:1; font-variant-numeric:tabular-nums; }
+.svset .u{ font-size:16px; color:var(--sub); }
+.spacer{ flex:1; }
+
+.timebar{ display:flex; align-items:center; gap:18px; padding:11px 22px; border-top:1px solid var(--line); }
+.runbtns{ display:flex; gap:10px; }
+.rb{ height:42px; padding:0 26px; border:none; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:var(--font); font-size:14px; font-weight:600; letter-spacing:2px; background:var(--panel-2); color:var(--sub); transition:all .2s; }
+.rb:hover{ color:var(--ink); background:#26262a; }
+.rb.on{ background:#33343a; color:var(--ink); }
+.rb.on.run{ background:var(--amber); color:#FFFFFF; }
+.bcell{ display:flex; align-items:baseline; gap:8px; } .bcell .k{ font-size:12px; color:var(--mute); }
+.bcell .v{ font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; } .bcell .v.amber{ color:var(--amber); }
+.bdiv{ width:1px; height:18px; background:var(--line-2); }
+
+.pagesplit{ display:flex; }
+.splitL{ flex:1; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--line); }
+.splitL-h{ padding:14px 22px; font-size:13px; font-weight:500; color:var(--sub); border-bottom:1px solid var(--line); }
+.splitL-chart{ flex:1; min-height:0; position:relative; }
+.splitL-chart svg{ width:100%; height:100%; display:block; }
+.splitR{ width:330px; display:flex; flex-direction:column; }
+
+.segtable{ }
+.seghead{ display:grid; grid-template-columns:52px 1fr 1fr; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line-2); }
+.seghead span{ font-size:11px; color:var(--sub); font-weight:500; letter-spacing:.5px; }
+.seghead span:nth-child(n+2){ text-align:right; }
+.segscroll{ flex:1; overflow-y:auto; padding:4px 10px; }
+.segrow{ display:grid; grid-template-columns:52px 1fr 1fr; gap:12px; padding:9px 10px; align-items:baseline; border-radius:6px; cursor:pointer; transition:background-color .15s; }
+.segrow:hover{ background:rgba(255,255,255,.03); }
+.segrow.active{ background:rgba(224,57,76,.10); }
+.segrow.sel{ background:rgba(224,57,76,.16); box-shadow:inset 0 0 0 1px rgba(224,57,76,.4); }
+.segrow .idx{ font-size:14px; font-weight:500; color:var(--sub); font-variant-numeric:tabular-nums; }
+.segrow .idx.active{ color:var(--amber); }
+.segrow .cell{ text-align:right; }
+.segrow .cell .n{ font-size:16px; font-weight:500; font-variant-numeric:tabular-nums; }
+.segrow .cell .u{ font-size:10px; color:var(--mute); margin-left:3px; }
+
+.param-left{ padding:20px 24px; overflow-y:auto; }
+.param-left h2{ font-size:14px; font-weight:600; letter-spacing:1px; margin-bottom:4px; }
+.hint{ font-size:12px; color:var(--mute); margin-bottom:18px; line-height:1.5; }
+.pform{ display:flex; flex-direction:column; gap:14px; }
+.frow{ display:flex; align-items:center; justify-content:space-between; gap:14px; }
+.frow .fk{ font-size:13px; color:var(--sub); }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.pcell{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+.pcell .k{ font-size:12px; color:var(--sub); }
+.pcell .row{ display:flex; align-items:baseline; gap:5px; margin-top:8px; }
+.pcell .v{ font-size:25px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+.pcell .v.amber{ color:var(--amber); } .pcell .u{ font-size:12px; color:var(--mute); }
+.btn-amber{ height:42px; padding:0 20px; border:none; border-radius:8px; background:var(--amber); color:#FFFFFF; font-family:var(--font); font-size:14px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:all .2s; }
+.btn-amber.active{ background:var(--warn); color:#fff; } .btn-amber:hover{ filter:brightness(1.08); }
+
+.tuning{ padding:0; }
+.tuning-h{ padding:14px 20px; font-size:13px; font-weight:600; color:var(--ink); border-bottom:1px solid var(--line); }
+.thead{ display:grid; grid-template-columns:1fr 42px 42px 42px 46px; gap:8px; padding:10px 18px; border-bottom:1px solid var(--line-2); }
+.thead span{ font-size:11px; color:var(--sub); font-weight:500; }
+.thead span:nth-child(n+2){ text-align:center; }
+.tscroll{ flex:1; overflow-y:auto; padding:4px 8px; }
+.trow{ display:grid; grid-template-columns:1fr 42px 42px 42px 46px; gap:8px; padding:11px 10px; align-items:center; border-radius:6px; }
+.trow:nth-child(even){ background:rgba(255,255,255,.02); }
+.tc-cond{ font-size:12px; color:var(--ink); line-height:1.3; }
+.tc-n{ font-size:14px; font-weight:600; color:var(--amber); text-align:center; font-variant-numeric:tabular-nums; }
+.applybtn{ height:28px; border:1px solid var(--line-2); border-radius:5px; background:transparent; color:var(--sub); font-family:var(--font); font-size:12px; cursor:pointer; transition:all .2s; }
+.applybtn:hover{ border-color:var(--amber); color:var(--amber); }
+
+.alarmviz{ flex:1; min-height:0; }
+.alarmviz svg{ width:100%; height:100%; display:block; }
+.alarm-right{ padding:20px 24px; overflow-y:auto; }
+.alarm-right h2{ font-size:14px; font-weight:600; letter-spacing:1px; margin-bottom:4px; }
+
+.dd{ position:relative; display:inline-block; }
+.dd-btn{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; color:var(--ink); font-family:var(--font); font-size:14px; font-weight:500; padding:9px 13px; cursor:pointer; min-width:170px; }
+.dd-btn:hover{ border-color:var(--line-2); } .dd-btn svg{ opacity:.6; }
+.dd-list{ position:absolute; top:calc(100% + 6px); left:0; right:0; background:#1A1A1D; border:1px solid var(--line-2); border-radius:6px; overflow:hidden; z-index:50; box-shadow:0 12px 30px rgba(0,0,0,.5); }
+.dd-opt{ padding:10px 13px; font-size:14px; color:var(--sub); cursor:pointer; transition:all .15s; }
+.dd-opt:hover{ background:#242428; color:var(--ink); } .dd-opt.on{ color:var(--amber); }
+
+.tabbar{ display:flex; border-top:1px solid var(--line); background:var(--panel); }
+.tab{ flex:1; padding:16px 0; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--sub); font-size:13px; font-weight:500; letter-spacing:2px; position:relative; transition:color .2s; }
+.tab:hover{ color:var(--ink); } .tab.on{ color:var(--amber); }
+.tab.on::after{ content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:34px; height:2px; background:var(--amber); border-radius:0 0 2px 2px; }
+
+.editable{ font-family:var(--font); font-variant-numeric:tabular-nums; color:inherit; cursor:pointer; border-radius:4px; padding:0 5px; margin:0 -5px; transition:background-color .15s; display:inline-block; }
+.editable:hover{ background:rgba(255,255,255,.08); }
+.editable.editing{ background:var(--inset); box-shadow:inset 0 0 0 1.5px var(--amber); }
+.einput{ font-family:var(--font); font-variant-numeric:tabular-nums; color:var(--amber); background:transparent; border:none; outline:none; padding:0; font:inherit; }
+
+/* 指令下发中 */
+.ctl-pending-mask{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,10,11,.5);backdrop-filter:blur(2px);cursor:wait}
+.ctl-pending-card{display:flex;align-items:center;gap:14px;padding:18px 26px;border-radius:12px;
+  background:var(--panel);border:1px solid rgba(224,57,76,.35);
+  box-shadow:0 12px 40px rgba(0,0,0,.55),0 0 24px rgba(224,57,76,.4)}
+.ctl-pending-spin{width:26px;height:26px;border-radius:50%;flex:none;
+  border:3px solid rgba(224,57,76,.22);border-top-color:var(--amber);
+  animation:ctlspin .8s linear infinite}
+@keyframes ctlspin{to{transform:rotate(360deg)}}
+.ctl-pending-txt{color:#f2f3f5;font-size:15px}
+.ctl-pending-txt em{font-style:normal;color:var(--amber);font-weight:700}
+.ctl-pending-sub{color:#8d93a0;font-size:12px;margin-top:3px}
+</style>
+</head>
+<body>
+<div id="root"><div class="screen" id="screen"></div></div>
+<div class="ctl-pending-mask" id="pend" style="display:none">
+  <div class="ctl-pending-card">
+    <div class="ctl-pending-spin"></div>
+    <div>
+      <div class="ctl-pending-txt">正在下发:<em id="pendTxt"></em></div>
+      <div class="ctl-pending-sub">写入仪表并回读校验中,请稍候…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const code=new URLSearchParams(location.search).get('code')||'';
+const DEMO=/[?&]demo=1/.test(location.search)||!code;
+const START_TEMP=25;
+const CTRL_MODES=[{value:0,label:'ONOFF 位式'},{value:1,label:'APID 自适应'},{value:2,label:'nPID'},{value:3,label:'PoP 程序'},{value:4,label:'SoP'}];
+/* 现场实测整定记录(来自 Excel) */
+const TUNING=[
+ {cond:'点动 · 起始49.9 峰430.7 · 14min', P:33.2, I:22.0, D:44.0, Ct:1.5},
+ {cond:'目标600 · 峰425.6 · 14min', P:36.0, I:24.3, D:48.6, Ct:1.5},
+ {cond:'程控480 · 起始40.4 · 11min', P:24.7, I:15.1, D:30.2, Ct:null},
+ {cond:'480→800 · 5/20', P:111.5, I:25.2, D:50.4, Ct:1.5},
+ {cond:'点动480 · 峰518.5 · 10min', P:21.5, I:14.0, D:28.0, Ct:1.5},
+ {cond:'初始27.2 目标600 · 稳5.5min', P:23.2, I:18.8, D:37.6, Ct:null},
+];
+function defaultSegs(){
+  const base=[[400,25],[680,20],[680,35],[900,22],[900,30],[120,45]];
+  const s=base.slice(); while(s.length<30)s.push([0,0]); return s;
+}
+/* 状态(遥测覆盖;DEMO 本地模拟) */
+const S={
+  online:false, canControl:false, devName:'',
+  pv:25, sv:680, svRo:680, srun:1, at:0, ctrl:1, pno:30, step:1,
+  pid:{P:33.2,I:22,D:44,Ct:1.5},
+  al:{HIAL:1200,LoAL:0,HdAL:50,LdAL:50,AHYS:2,AOP:true},
+  segs:defaultSegs(), inp:0, dpt:1, addr:2,
+};
+let tab='home', selSeg=-1, ddOpen=false, elapsed=DEMO?58:0;
+let pending=null, editing=false;
+
+const pad=n=>String(Math.floor(n)).padStart(2,'0');
+const fmtDur=m=>pad(m/60)+':'+pad(m%60);
+const esc=s=>String(s);
+
+/* ---------- 派生量 ---------- */
+function deriveActive(){
+  const prog=S.pno>0;
+  if(!prog)return [[S.sv,15],[S.sv,75]];
+  let last=0; S.segs.forEach((x,j)=>{if(x[1]>0)last=j});
+  const n=Math.max(1,Math.min(30,Math.min(S.pno,last+1)));
+  return S.segs.slice(0,n);
+}
+function tempAt(active,tt){
+  let a=START_TEMP,at2=0;
+  for(const s of active){ if(tt<=at2+s[1])return a+(s[0]-a)*((tt-at2)/(s[1]||1)); at2+=s[1]; a=s[0]; }
+  return a;
+}
+function estimateElapsed(active){          /* 真实模式:段号 + SV 插值估算进度 */
+  if(DEMO)return elapsed;
+  const step=Math.max(1,Math.min(active.length,S.step||1));
+  let acc=0; for(let i=0;i<step-1;i++)acc+=active[i][1];
+  const prev=step===1?START_TEMP:active[step-2][0], cur=active[step-1][0];
+  let frac=0.5;
+  if(Math.abs(cur-prev)>0.5)frac=Math.max(0,Math.min(1,(S.svRo-prev)/(cur-prev)));
+  return acc+frac*(active[step-1][1]||0);
+}
+
+/* ---------- SVG:程序曲线 ---------- */
+function curveSvg(active,el,sel){
+  const pts=[[0,START_TEMP]]; let t=0;
+  active.forEach(s=>{t+=s[1];pts.push([t,s[0]])});
+  const maxT=pts[pts.length-1][0]||1;
+  const maxTemp=Math.max(200,Math.ceil(Math.max.apply(null,pts.map(p=>p[1]))*1.12/100)*100);
+  const W=780,H=340,X0=58,X1=750,Y0=56,Y1=286;
+  const sx=tt=>X0+tt/maxT*(X1-X0), sy=v=>Y1-v/maxTemp*(Y1-Y0);
+  const curT=Math.max(0,Math.min(maxT,el)), curTemp=tempAt(active,curT);
+  const solid=pts.filter(p=>p[0]<=curT).map(p=>[sx(p[0]),sy(p[1])]); solid.push([sx(curT),sy(curTemp)]);
+  const future=[[sx(curT),sy(curTemp)]].concat(pts.filter(p=>p[0]>curT).map(p=>[sx(p[0]),sy(p[1])]));
+  let grid=''; for(let v=0;v<=maxTemp+1;v+=maxTemp/4)
+    grid+=`<line x1="${X0}" y1="${sy(v)}" x2="${X1}" y2="${sy(v)}" stroke="#1E1E20"/><text x="${X0-10}" y="${sy(v)+4}" font-size="11" fill="#5E5E64" text-anchor="end">${Math.round(v)}</text>`;
+  let selHtml='';
+  if(sel>=0&&sel<active.length&&active[sel][1]>0){
+    let c=0; for(let i=0;i<sel;i++)c+=active[i][1];
+    const A=[sx(c),sy(sel===0?START_TEMP:active[sel-1][0])], B=[sx(c+active[sel][1]),sy(active[sel][0])];
+    const mid=(A[0]+B[0])/2, lbl=Math.min(A[1],B[1])-16, bx=Math.max(X0,Math.min(mid-26,X1-52));
+    selHtml=`<line x1="${A[0]}" y1="${A[1]}" x2="${B[0]}" y2="${B[1]}" stroke="#F5919E" stroke-width="6" stroke-linecap="round" opacity=".85"/>
+      <circle cx="${A[0]}" cy="${A[1]}" r="5" fill="#000" stroke="#E0394C" stroke-width="2"/><circle cx="${B[0]}" cy="${B[1]}" r="5" fill="#000" stroke="#E0394C" stroke-width="2"/>
+      <rect x="${bx}" y="${lbl-14}" width="52" height="19" rx="4" fill="#000" stroke="#E0394C"/>
+      <text x="${bx+26}" y="${lbl-1}" font-size="11" fill="#E0394C" text-anchor="middle">段 ${sel+1}</text>`;
+  }
+  const tipX=Math.min(sx(curT)+12,X1-84), tipY=Math.max(sy(curTemp)+8,Y0);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E0394C" stop-opacity=".26"/><stop offset="1" stop-color="#E0394C" stop-opacity="0"/></linearGradient></defs>
+    ${grid}
+    <polygon points="${solid.map(p=>p.join(',')).join(' ')} ${sx(curT)},${Y1} ${sx(0)},${Y1}" fill="url(#area)"/>
+    ${selHtml}
+    <polyline points="${future.map(p=>p.join(',')).join(' ')}" fill="none" stroke="#4A4A4E" stroke-width="2.5" stroke-dasharray="5 6" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="${solid.map(p=>p.join(',')).join(' ')}" fill="none" stroke="#E0394C" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${sx(0)}" cy="${sy(START_TEMP)}" r="5" fill="#E0394C"/>
+    <circle cx="${sx(maxT)}" cy="${sy(pts[pts.length-1][1])}" r="4.5" fill="none" stroke="#5E5E64" stroke-width="2"/>
+    <circle cx="${sx(curT)}" cy="${sy(curTemp)}" r="6.5" fill="#E0394C"/>
+    <g transform="translate(${tipX},${tipY})">
+      <rect x="0" y="0" width="80" height="30" rx="4" fill="#000" stroke="#3A3A3C"/>
+      <text x="9" y="13" font-size="11" fill="#E0394C">${Math.round(curTemp)} °C</text>
+      <text x="9" y="25" font-size="10" fill="#9A9A9E">目标 SV</text></g>
+    <text x="${sx(0)}" y="${Y1+21}" font-size="11" fill="#9A9A9E">0 min</text>
+    <text x="${X1}" y="${Y1+21}" font-size="11" fill="#9A9A9E" text-anchor="end">总 ${fmtDur(maxT)}</text>
+  </svg>`;
+}
+
+/* ---------- SVG:报警区间 ---------- */
+function alarmSvg(sv,pv,al){
+  const MAXS=1300,W=290,H=470,CX=130,TW=64,Y0=22,Y1=430;
+  const sy=v=>Y1-Math.max(0,Math.min(MAXS,v))/MAXS*(Y1-Y0);
+  const bandTop=sy(sv+al.HdAL), bandBot=sy(sv-al.LdAL);
+  const L=CX-TW/2,R=CX+TW/2;
+  let ticks=''; for(let v=0;v<=MAXS;v+=250)
+    ticks+=`<line x1="${L-6}" y1="${sy(v)}" x2="${L}" y2="${sy(v)}" stroke="#5E5E64"/><text x="${L-10}" y="${sy(v)+4}" font-size="11" fill="#5E5E64" text-anchor="end">${v}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    <rect x="${L}" y="${Y0}" width="${TW}" height="${Y1-Y0}" rx="6" fill="#161618" stroke="#26262A"/>
+    <rect x="${L}" y="${Y0}" width="${TW}" height="${Math.max(0,sy(al.HIAL)-Y0)}" fill="rgba(255,138,61,.15)"/>
+    <rect x="${L}" y="${sy(al.LoAL)}" width="${TW}" height="${Math.max(0,Y1-sy(al.LoAL))}" fill="rgba(255,138,61,.15)"/>
+    <rect x="${L}" y="${bandTop}" width="${TW}" height="${Math.max(0,bandBot-bandTop)}" fill="rgba(224,57,76,.16)"/>
+    ${ticks}
+    <rect x="${L+2}" y="${sy(pv)}" width="${TW-4}" height="${Math.max(0,Y1-sy(pv))}" fill="rgba(224,57,76,.22)"/>
+    <line x1="${L}" y1="${sy(al.HIAL)}" x2="${R+72}" y2="${sy(al.HIAL)}" stroke="#FF8A3D" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="${R+8}" y="${sy(al.HIAL)-4}" font-size="11" fill="#FF8A3D">上限 ${al.HIAL}°</text>
+    ${al.LoAL>0?`<line x1="${L}" y1="${sy(al.LoAL)}" x2="${R+72}" y2="${sy(al.LoAL)}" stroke="#FF8A3D" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="${R+8}" y="${sy(al.LoAL)+13}" font-size="11" fill="#FF8A3D">下限 ${al.LoAL}°</text>`:''}
+    <text x="${R+8}" y="${bandTop-2}" font-size="10" fill="#C77A3D">+${al.HdAL} 偏差上</text>
+    <text x="${R+8}" y="${bandBot+11}" font-size="10" fill="#C77A3D">−${al.LdAL} 偏差下</text>
+    <line x1="${L-4}" y1="${sy(sv)}" x2="${R+72}" y2="${sy(sv)}" stroke="#E0394C" stroke-width="2"/>
+    <text x="${R+8}" y="${sy(sv)+4}" font-size="12" fill="#E0394C" font-weight="600">SV ${Math.round(sv)}°</text>
+    <circle cx="${CX}" cy="${sy(pv)}" r="5.5" fill="#E0394C"/>
+    <text x="${CX}" y="${sy(pv)-9}" font-size="12" fill="#FFF" font-weight="600" text-anchor="middle">${Math.round(pv)}°</text>
+  </svg>`;
+}
+
+/* ---------- 可编辑 ---------- */
+function E(val,key,dec,min,max,w){
+  return `<span class="editable" data-edit="${key}" data-dec="${dec}" data-min="${min}" data-max="${max}" data-w="${w}">${(+val).toFixed(dec)}</span>`;
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  if(editing||pending)return;
+  const prog=S.pno>0;
+  const active=deriveActive();
+  const total=active.reduce((a,s)=>a+s[1],0);
+  const el=Math.min(estimateElapsed(active),total);
+  const curSV=Math.round(DEMO?tempAt(active,el):S.svRo);
+  let acc=0,step=1;
+  if(DEMO){ for(let i=0;i<active.length;i++){ if(el<acc+active[i][1]||i===active.length-1){step=i+1;break;} acc+=active[i][1]; } }
+  else step=Math.max(1,Math.min(active.length,S.step||1));
+  const running=S.srun===0, hold=S.srun===2;
+  const done=el>=total&&running&&prog;
+  const stTxt=S.at!==0?'自整定中':done?'已完成':running?'运行中':hold?'保持':'停止';
+  const stCls=S.at!==0?'at':(running&&!done)?'':'idle';
+  const ctrlCur=CTRL_MODES.find(m=>m.value===S.ctrl)||CTRL_MODES[1];
+
+  let body='';
+  if(tab==='home'){
+    body=`
+    <div class="content">
+      <div class="chart">
+        <div class="bigtemp"><span class="v">${S.pv.toFixed(1)}</span><span class="u">°C</span><div class="lab">实时温度 PV<span class="reg">0x4A</span></div></div>
+        ${curveSvg(active,el,-1)}
+      </div>
+      <div class="side">
+        ${prog
+          ?`<div class="srow"><div class="k">目标 SV<span class="reg">0x4B</span></div><div class="big"><span class="v amber">${running?curSV:'—'}</span><span class="u">°C</span></div></div>`
+          :`<div class="srow"><div class="k">给定值 SV<span class="reg">0x00</span></div><div class="svset"><span class="v">${E(S.sv,'sv',0,20,1200,100)}</span><span class="u">°C</span></div></div>`}
+        <div class="srow"><div class="k">${prog?'当前段号 STEP':'运行模式'}<span class="reg">${prog?'0x2E':'0x2B'}</span></div><div class="big"><span class="v">${prog?step:'点动'}</span>${prog?`<span class="u">/ ${active.length}</span>`:''}</div></div>
+        <div class="srow"><div class="k">控制方式<span class="reg">0x06</span></div><div class="big"><span class="v" style="font-size:22px">${ctrlCur.label.split(' ')[0]}</span></div></div>
+        <div class="spacer"></div>
+        <div class="srow" style="border-bottom:none"><div class="k">上限保护 HIAL</div><div class="big"><span class="v" style="font-size:22px">${S.al.HIAL}</span><span class="u">°C</span></div></div>
+      </div>
+    </div>
+    <div class="timebar">
+      <span style="font-size:11px;color:var(--mute);align-self:center;margin-right:2px">运行 <span class="reg">0x1B</span></span>
+      <div class="runbtns">
+        <button class="rb run ${running?'on':''}" data-run="0">运行</button>
+        <button class="rb ${hold?'on':''}" data-run="2">保持</button>
+        <button class="rb ${S.srun===1?'on':''}" data-run="1">停止</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="bcell"><span class="k">已用${DEMO?'':'(约)'}</span><span class="v amber">${fmtDur(Math.round(el))}</span><span class="k">/ ${fmtDur(total)}</span></div>
+      <div class="bdiv"></div><div class="bcell"><span class="k">剩余</span><span class="v">${fmtDur(Math.max(0,Math.round(total-el)))}</span></div>
+    </div>`;
+  }
+  else if(tab==='prog'){
+    let rows='';
+    S.segs.forEach((s,i)=>{
+      const act=prog&&i===step-1&&i<active.length;
+      rows+=`<div class="segrow ${selSeg===i?'sel':''} ${act?'active':''}" style="opacity:${i<active.length||!prog?1:.4}" data-selseg="${i}">
+        <span class="idx ${act?'active':''}">${i+1}</span>
+        <span class="cell"><span class="n">${E(s[0],'segsp:'+(i+1),0,0,1200,52)}</span><span class="u">°C</span></span>
+        <span class="cell"><span class="n">${E(s[1],'segt:'+(i+1),0,0,999,42)}</span><span class="u">min</span></span>
+      </div>`;
+    });
+    body=`
+    <div class="content pagesplit">
+      <div class="splitL">
+        <div class="splitL-h">程序曲线 · SP/t <span class="reg">0x50–0x8B</span> · ${active.length} 段 · 总 ${fmtDur(total)}${selSeg>=0&&S.segs[selSeg]&&S.segs[selSeg][1]>0?` · 已选第 ${selSeg+1} 段`:''}</div>
+        <div class="splitL-chart">${curveSvg(active,el,selSeg)}</div>
+      </div>
+      <div class="splitR segtable">
+        <div class="seghead"><span>段</span><span>温度 SP</span><span>时间 t</span></div>
+        <div class="segscroll">${rows}</div>
+      </div>
+    </div>`;
+  }
+  else if(tab==='param'){
+    let trows='';
+    TUNING.forEach((r,i)=>{
+      trows+=`<div class="trow"><span class="tc-cond">${r.cond}</span>
+        <span class="tc-n">${r.P}</span><span class="tc-n">${r.I}</span><span class="tc-n">${r.D}</span>
+        <button class="applybtn" data-apply="${i}">应用</button></div>`;
+    });
+    let ddOpts='';
+    CTRL_MODES.forEach(o=>{ddOpts+=`<div class="dd-opt ${o.value===S.ctrl?'on':''}" data-ddopt="${o.value}">${o.label}</div>`});
+    body=`
+    <div class="content pagesplit">
+      <div class="splitL param-left">
+        <h2>控制参数</h2>
+        <div class="hint">CtrL 控制方式 / PID / 自整定。宇电默认 APID。自整定时需关闭程序段(仅设一段),否则温度会超设定值。</div>
+        <div class="pform">
+          <div class="frow"><span class="fk">控制方式 CtrL <span class="reg">0x06</span></span>
+            <div class="dd" style="width:168px">
+              <button class="dd-btn" data-dd="1"><span>${ctrlCur.label}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+              ${ddOpen?`<div class="dd-list">${ddOpts}</div>`:''}
+            </div></div>
+          <div class="frow"><span class="fk">自整定 At <span class="reg">0x1D</span></span>
+            <button class="btn-amber ${S.at!==0?'active':''}" data-at="1">${S.at!==0?'停止自整定':'启动自整定'}</button></div>
+        </div>
+        <div class="grid2" style="margin-top:16px">
+          <div class="pcell"><div class="k">P 比例带 <span class="reg">0x07</span></div><div class="row"><span class="v amber">${E(S.pid.P,'pid:P',1,0,9999,58)}</span></div></div>
+          <div class="pcell"><div class="k">I 积分时间 <span class="reg">0x08</span></div><div class="row"><span class="v amber">${E(S.pid.I,'pid:I',0,0,9999,54)}</span><span class="u">秒</span></div></div>
+          <div class="pcell"><div class="k">d 微分时间 <span class="reg">0x09</span></div><div class="row"><span class="v amber">${E(S.pid.D,'pid:D',0,0,9999,54)}</span><span class="u">0.1秒</span></div></div>
+          <div class="pcell"><div class="k">CtI 控制周期 <span class="reg">0x0A</span></div><div class="row"><span class="v amber">${E(S.pid.Ct,'pid:Ct',0,0,999,48)}</span><span class="u">0.1秒</span></div></div>
+          <div class="pcell"><div class="k">输入规格 InP <span class="reg">0x0B</span></div><div class="row"><span class="v" style="font-size:18px">K 型</span></div></div>
+          <div class="pcell"><div class="k">小数点 dPt <span class="reg">0x0C</span></div><div class="row"><span class="v" style="font-size:18px">0.0</span><span class="u">1位</span></div></div>
+          <div class="pcell"><div class="k">通讯地址 Addr <span class="reg">0x16</span></div><div class="row"><span class="v" style="font-size:18px">${S.addr}</span><span class="u">从站</span></div></div>
+        </div>
+      </div>
+      <div class="splitR tuning">
+        <div class="tuning-h">整定记录 · 现场实测</div>
+        <div class="thead"><span>工况</span><span>P</span><span>I</span><span>D</span><span></span></div>
+        <div class="tscroll">${trows}</div>
+      </div>
+    </div>`;
+  }
+  else{ /* alarm */
+    body=`
+    <div class="content pagesplit">
+      <div class="splitL">
+        <div class="splitL-h">报警区间 · 相对设定值 ${prog?curSV:Math.round(S.sv)}°C</div>
+        <div class="alarmviz">${alarmSvg(prog?curSV:S.sv,S.pv,S.al)}</div>
+      </div>
+      <div class="splitR alarm-right">
+        <h2>报警设置</h2>
+        <div class="hint">上限 1200°C 用于加热失控保护(温度飙升)。加热中实时温度略高于设定属正常。炉温 ≤200°C 方可开炉膛,否则会裂。</div>
+        <div class="grid2">
+          <div class="pcell"><div class="k">上限 HIAL <span class="reg">0x01</span></div><div class="row"><span class="v amber">${E(S.al.HIAL,'al:HIAL',0,0,1800,64)}</span><span class="u">°C</span></div></div>
+          <div class="pcell"><div class="k">下限 LoAL <span class="reg">0x02</span></div><div class="row"><span class="v">${E(S.al.LoAL,'al:LoAL',0,0,1800,50)}</span><span class="u">°C</span></div></div>
+          <div class="pcell"><div class="k">偏差上限 HdAL <span class="reg">0x03</span></div><div class="row"><span class="v">${E(S.al.HdAL,'al:HdAL',0,0,500,50)}</span><span class="u">°C</span></div></div>
+          <div class="pcell"><div class="k">偏差下限 LdAL <span class="reg">0x04</span></div><div class="row"><span class="v">${E(S.al.LdAL,'al:LdAL',0,0,500,50)}</span><span class="u">°C</span></div></div>
+          <div class="pcell"><div class="k">回差 AHYS <span class="reg">0x05</span></div><div class="row"><span class="v">${E(S.al.AHYS,'al:AHYS',0,0,100,44)}</span><span class="u">°C</span></div></div>
+          <div class="pcell"><div class="k">报警输出 AOP <span class="reg">0x0F</span></div><div class="row" style="margin-top:11px">
+            <div class="seg2"><span class="opt ${S.al.AOP?'on':''}" data-aop="1">输出</span><span class="opt ${!S.al.AOP?'on':''}" data-aop="0">不输出</span></div></div></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const TABS=[['home','监控'],['prog','程序段'],['param','参数'],['alarm','报警']];
+  document.getElementById('screen').innerHTML=`
+    <div class="top">
+      <a class="back" href="/">← 返回</a>
+      <div class="lead"><span class="abar"></span><span class="title">高温炉控制</span><span class="subttl">${S.devName||'HT-TF1200 · 宇电 AI'}</span></div>
+      <div class="seg2">
+        <span class="opt ${!prog?'on':''}" data-mode="0">点动</span>
+        <span class="opt ${prog?'on':''}" data-mode="30">程序</span>
+      </div>
+      <div class="spacer"></div>
+      <span class="link ${S.online||DEMO?'on':''}">${DEMO?'演示模式':(S.online?'● 在线':'○ 离线')}</span>
+      <span class="st ${stCls}"><span class="dot"></span>${stTxt}</span>
+    </div>
+    ${body}
+    <div class="tabbar">
+      ${TABS.map(([id,label])=>`<div class="tab ${tab===id?'on':''}" data-tab="${id}"><span class="tl">${label}</span></div>`).join('')}
+    </div>`;
+}
+
+/* ---------- 数据接入 ---------- */
+const loginRedirect=()=>{location.href='/login.html?next='+encodeURIComponent(location.pathname+location.search)};
+async function loadMeta(){
+  if(DEMO){S.canControl=true;S.devName='演示 · 未绑定设备';return}
+  try{
+    const r=await fetch('/web/devices');
+    if(r.status===401)return loginRedirect();
+    const d=(await r.json()).find(x=>x.code===code);
+    if(d){S.devName=(d.name||code)+' · '+code;S.canControl=!!d.canControl}
+  }catch(e){}
+}
+async function loadTel(){
+  if(DEMO)return;
+  try{
+    const r=await fetch('/web/devices/'+encodeURIComponent(code)+'/telemetry');
+    if(r.status===401)return loginRedirect();
+    if(!r.ok)return;
+    const j=await r.json();
+    S.online=!!j.online;
+    if(j.online&&j.values){
+      const v=j.values;
+      if(typeof v.pv==='number')S.pv=v.pv;
+      if(typeof v.sv==='number')S.sv=v.sv;
+      if(typeof v.svRo==='number')S.svRo=v.svRo;
+      if(typeof v.srun==='number')S.srun=v.srun;
+      if(typeof v.at==='number')S.at=v.at;
+      if(typeof v.ctrl==='number')S.ctrl=v.ctrl;
+      if(typeof v.pno==='number')S.pno=v.pno;
+      if(typeof v.step==='number')S.step=v.step;
+      if(typeof v.p==='number')S.pid.P=v.p;
+      if(typeof v.i==='number')S.pid.I=v.i;
+      if(typeof v.d==='number')S.pid.D=v.d;
+      if(typeof v.ct==='number')S.pid.Ct=v.ct;
+      if(typeof v.hial==='number')S.al.HIAL=v.hial;
+      if(typeof v.loal==='number')S.al.LoAL=v.loal;
+      if(typeof v.hdal==='number')S.al.HdAL=v.hdal;
+      if(typeof v.ldal==='number')S.al.LdAL=v.ldal;
+      if(typeof v.ahys==='number')S.al.AHYS=v.ahys;
+      if(typeof v.aop==='boolean')S.al.AOP=v.aop;
+      if(typeof v.addr==='number')S.addr=v.addr;
+      if(Array.isArray(v.segs))S.segs=v.segs.map(s=>[+s[0]||0,+s[1]||0]);
+    }
+    render();
+  }catch(e){}
+}
+
+/* ---------- 控制下发 ---------- */
+const pendEl=document.getElementById('pend');
+async function control(command,value,label){
+  if(!S.canControl){alert('无该设备控制权限');return false}
+  if(pending)return false;
+  if(DEMO)return demoControl(command,value);
+  pending=label||command;
+  pendEl.style.display='flex';
+  document.getElementById('pendTxt').textContent=pending;
+  try{
+    const r=await fetch('/web/devices/'+encodeURIComponent(code)+'/control',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({command,value})
+    });
+    if(r.status===401){loginRedirect();return false}
+    const j=await r.json().catch(()=>({}));
+    console.info('[furnace] control',command,value,'HTTP',r.status,j);
+    if(!(r.ok&&j.ok))alert((j&&j.error)?j.error+'(HTTP '+r.status+')':'下发失败(HTTP '+r.status+')');
+    await loadTel();
+    return r.ok&&j.ok;
+  }catch(e){
+    console.error('[furnace] control 网络异常',command,value,e);
+    alert('下发失败:无法连接服务器('+((e&&e.message)||e)+')');
+    return false;
+  }
+  finally{pending=null;pendEl.style.display='none';render()}
+}
+function demoControl(command,value){
+  if(command==='setSv')S.sv=value;
+  else if(command==='srun')S.srun=value;
+  else if(command==='setPno'){S.pno=value;elapsed=0}
+  else if(command==='setCtrl')S.ctrl=value;
+  else if(command==='at')S.at=value;
+  else if(command==='setP')S.pid.P=value; else if(command==='setI')S.pid.I=value;
+  else if(command==='setD')S.pid.D=value; else if(command==='setCt')S.pid.Ct=value;
+  else if(command==='setHial')S.al.HIAL=value; else if(command==='setLoal')S.al.LoAL=value;
+  else if(command==='setHdal')S.al.HdAL=value; else if(command==='setLdal')S.al.LdAL=value;
+  else if(command==='setAhys')S.al.AHYS=value;
+  else if(command==='setAop')S.al.AOP=value!==0;
+  else if(/^setSegSp/.test(command))S.segs[+command.slice(8)-1][0]=value;
+  else if(/^setSegT/.test(command))S.segs[+command.slice(7)-1][1]=value;
+  render();return true;
+}
+
+/* ---------- 事件(委托) ---------- */
+document.getElementById('root').addEventListener('click',async e=>{
+  const q=sel=>e.target.closest(sel);
+  let n;
+  if(n=q('[data-tab]')){tab=n.getAttribute('data-tab');ddOpen=false;render();return}
+  if(n=q('[data-mode]')){const v=+n.getAttribute('data-mode');if(v!==S.pno){await control('setPno',v,v===0?'切换点动模式':'切换程序模式');if(DEMO)render()}return}
+  if(n=q('[data-run]')){const v=+n.getAttribute('data-run');await control('srun',v,v===0?'运行':v===1?'停止':'保持');return}
+  if(n=q('[data-at]')){await control('at',S.at===0?1:0,S.at===0?'启动自整定':'停止自整定');return}
+  if(n=q('[data-aop]')){await control('setAop',+n.getAttribute('data-aop'),'报警输出');return}
+  if(n=q('[data-dd]')){ddOpen=!ddOpen;render();return}
+  if(n=q('[data-ddopt]')){ddOpen=false;await control('setCtrl',+n.getAttribute('data-ddopt'),'控制方式');if(DEMO)render();return}
+  if(n=q('[data-apply]')){
+    const r=TUNING[+n.getAttribute('data-apply')];
+    if(!confirm(`应用整定参数 P=${r.P} I=${r.I} D=${r.D}${r.Ct?` Ct=${r.Ct}`:''} ?`))return;
+    if(await control('setP',r.P,'P 比例带')){
+      await control('setI',r.I,'I 积分时间');
+      await control('setD',r.D,'d 微分时间');
+      if(r.Ct)await control('setCt',r.Ct,'CtI 控制周期');
+    }
+    return;
+  }
+  if((n=q('.editable'))&&!n.classList.contains('editing')){startEdit(n);return}
+  if(n=q('[data-selseg]')){
+    const i=+n.getAttribute('data-selseg');selSeg=(i===selSeg?-1:i);render();return;
+  }
+});
+
+const CMD_OF={sv:['setSv','给定值 SV'],'pid:P':['setP','P 比例带'],'pid:I':['setI','I 积分时间'],
+  'pid:D':['setD','d 微分时间'],'pid:Ct':['setCt','CtI 控制周期'],
+  'al:HIAL':['setHial','上限 HIAL'],'al:LoAL':['setLoal','下限 LoAL'],'al:HdAL':['setHdal','偏差上限'],
+  'al:LdAL':['setLdal','偏差下限'],'al:AHYS':['setAhys','报警回差']};
+function startEdit(span){
+  const key=span.getAttribute('data-edit');
+  const dec=+span.getAttribute('data-dec'),min=+span.getAttribute('data-min'),max=+span.getAttribute('data-max'),w=+span.getAttribute('data-w');
+  const cur=span.textContent;
+  editing=true;
+  span.classList.add('editing');
+  span.innerHTML=`<input class="einput" style="width:${w}px" value="${cur}">`;
+  const inp=span.querySelector('input');
+  inp.focus();inp.select();
+  let done=false;
+  const commit=async ok=>{
+    if(done)return;done=true;editing=false;
+    const nval=parseFloat(inp.value);
+    span.classList.remove('editing');span.textContent=cur;
+    if(ok&&!isNaN(nval)){
+      const v=+Math.max(min,Math.min(max,nval)).toFixed(dec);
+      let cmd,name;
+      if(key.startsWith('segsp:')){cmd='setSegSp'+key.slice(6);name=`第${key.slice(6)}段温度 → ${v}`}
+      else if(key.startsWith('segt:')){cmd='setSegT'+key.slice(5);name=`第${key.slice(5)}段时间 → ${v}`}
+      else if(CMD_OF[key]){cmd=CMD_OF[key][0];name=CMD_OF[key][1]+' → '+v}
+      if(cmd)await control(cmd,v,name);
+    }
+    render();
+  };
+  inp.addEventListener('blur',()=>commit(true));
+  inp.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter')commit(true);
+    if(ev.key==='Escape')commit(false);
+  });
+}
+
+/* ---------- 演示模式模拟 ---------- */
+if(DEMO){
+  setInterval(()=>{
+    const active=deriveActive(), total=active.reduce((a,s)=>a+s[1],0);
+    if(S.srun===0)elapsed=Math.min(total,+(elapsed+0.15).toFixed(2));
+    const curSV=tempAt(active,Math.min(elapsed,total));
+    S.svRo=curSV;
+    const target=S.srun===0?curSV:(S.srun===2?S.pv:25);
+    S.pv=+(S.pv+(target-S.pv)*0.1+(Math.random()-0.5)*0.6).toFixed(1);
+    render();
+  },500);
+  S.pv=680;S.srun=0;
+}
+
+/* ---------- 启动 ---------- */
+loadMeta().then(loadTel).then(render);
+if(!DEMO)setInterval(loadTel,2000);
+render();
+
+/* 手机横屏适配:视口高不足设计高 644 时整体等比缩放 */
+(function(){ var DH=644, root=document.getElementById('root');
+  function fit(){ var s=Math.min(1,window.innerHeight/DH);
+    if(s<1){ root.style.transformOrigin='0 0'; root.style.transform='scale('+s+')'; root.style.width=(100/s)+'vw'; root.style.height=(window.innerHeight/s)+'px'; }
+    else{ root.style.transform=''; root.style.width=''; root.style.height=''; } }
+  window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120)}); fit();
+})();
+</script>
+</body>
+</html>

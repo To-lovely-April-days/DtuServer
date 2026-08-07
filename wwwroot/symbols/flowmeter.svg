@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 流量计:圆形仪表 + 流向 -->
+  <circle cx="50" cy="50" r="30" fill="#ffffff" stroke="#2b3038" stroke-width="3"/>
+  <path d="M20 50 L80 50" stroke="#2b3038" stroke-width="3"/>
+  <path d="M44 40 L58 50 L44 60 Z" fill="#A41626"/>
+  <text x="50" y="30" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#2b3038" text-anchor="middle">F</text>
+</svg>

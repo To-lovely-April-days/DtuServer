@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 微反应器:板式反应器阵列 -->
+  <rect x="14" y="18" width="72" height="64" rx="6" fill="#ffffff" stroke="#2b3038" stroke-width="3"/>
+  <g fill="none" stroke="#A41626" stroke-width="2.4">
+    <circle cx="34" cy="38" r="8"/><circle cx="50" cy="38" r="8"/><circle cx="66" cy="38" r="8"/>
+    <circle cx="34" cy="62" r="8"/><circle cx="50" cy="62" r="8"/><circle cx="66" cy="62" r="8"/>
+  </g>
+  <path d="M6 30 L14 30 M6 70 L14 70 M86 50 L94 50" stroke="#2b3038" stroke-width="3"/>
+</svg>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>我的账号 · MaxChemical IoT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--accent:#A41626;--ink:#14161c;--text-2:#4a525e;--text-3:#8b919b;--line:#e5e7eb;--line-2:#f0f1f3;--bg-soft:#f3f4f6;--bg-head:#f8f9fa;--ok:#1f7a4d;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{font-family:'Public Sans','Noto Sans SC',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;}
+  .topbar{position:relative;height:56px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid var(--line);background:#fff;}
+  .topbar::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;background-image:linear-gradient(rgba(20,20,30,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(20,20,30,.03) 1px,transparent 1px);background-size:34px 34px;-webkit-mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent);mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent);}
+  .brand{position:relative;display:flex;align-items:center;gap:11px;}
+  .brand-name{font-size:15px;font-weight:700;letter-spacing:.06em;}
+  .brand-badge{font-size:9.5px;letter-spacing:.18em;color:var(--text-3);border:1px solid #dcdde1;border-radius:4px;padding:3px 7px;}
+  .top-right{position:relative;display:flex;align-items:center;gap:18px;color:var(--text-3);}
+  .top-right a{color:var(--text-3);font-size:13px;cursor:pointer;}.top-right a:hover{color:var(--ink);}
+  .shell{display:flex;flex:1;min-height:0;}
+  .sidebar{width:226px;flex-shrink:0;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:3px;transition:width .2s ease;overflow:hidden;}
+  .sidebar.collapsed{width:64px;}
+  .nav-eyebrow{font-size:10px;letter-spacing:.18em;color:var(--text-3);font-weight:600;padding:6px 13px 8px;white-space:nowrap;}
+  .sidebar.collapsed .nav-eyebrow{opacity:0;height:0;padding:0;overflow:hidden;}
+  .side-item{position:relative;display:flex;align-items:center;gap:13px;height:42px;padding:0 12px;border-radius:9px;color:var(--text-2);cursor:pointer;transition:background .14s,color .14s;white-space:nowrap;}
+  .side-item:hover{background:var(--line-2);color:var(--ink);}
+  .side-ico-box{flex:0 0 20px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+  .side-label{font-size:13.5px;font-weight:500;}
+  .side-item.active{background:var(--bg-soft);color:var(--ink);}
+  .side-item.active::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--accent);}
+  .side-item.active .side-ico-box{color:var(--accent);}
+  .side-spacer{flex:1;}
+  .side-divider{height:1px;background:var(--line);margin:6px 12px;}
+  .sidebar.collapsed .side-divider{margin:6px 8px;}
+  .sidebar.collapsed .side-item{padding:0;justify-content:center;}
+  .sidebar.collapsed .side-label,.sidebar.collapsed .nav-eyebrow{opacity:0;width:0;overflow:hidden;}
+  .sidebar.collapsed .side-item.active::before{display:none;}
+  .side-toggle .tg{transition:transform .2s ease;}
+  .sidebar.collapsed .side-toggle .tg{transform:rotate(180deg);}
+  .content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;}
+  .content-scroll{flex:1;overflow:auto;padding:30px 36px;}
+  .kicker{font-size:11px;letter-spacing:.22em;color:var(--accent);font-weight:500;margin-bottom:9px;}
+  .title{font-size:24px;font-weight:700;letter-spacing:-.01em;}
+  .subtitle{font-size:13px;color:var(--text-3);margin-top:5px;}
+  .card{max-width:660px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:22px;box-shadow:0 1px 2px rgba(16,24,40,.04);}
+  .card h3{font-size:15px;font-weight:700;margin-bottom:6px;}
+  .kv{font-size:11px;letter-spacing:.08em;color:var(--text-3);font-weight:600;margin:16px 0 5px;}
+  .val{font-size:15px;}
+  .vbox{font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--bg-head);border:1px solid var(--line);border-radius:8px;padding:11px 13px;word-break:break-all;}
+  .btn{height:40px;padding:0 18px;border:none;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-weight:600;font-size:13.5px;cursor:pointer;margin-top:18px;box-shadow:0 1px 2px rgba(164,22,38,.22);}
+  .btn:hover{filter:brightness(1.08);}
+  .btn.ghost{background:#fff;color:var(--text-2);border:1px solid #d7dae0;box-shadow:none;}
+  .btn.ghost:hover{background:var(--bg-head);}
+  .warn{color:var(--accent);font-size:12.5px;margin-top:8px;}
+  .hint{color:var(--text-3);font-size:12.5px;margin-top:8px;}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo"><img src="/logo.svg" alt="MaxChemical" style="height:42px;width:auto;display:block" /></span>
+      <span class="brand-name">MaxChemical</span>
+      <span class="brand-badge mono">IoT&nbsp;CLOUD</span>
+    </div>
+    <div class="top-right">
+      <a href="/">← 返回设备总览</a>
+      <a id="logout">退出</a>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-eyebrow">导航</div>
+      <div class="side-item" title="数据看板"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 3v18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7 14l3-4 3 2 4-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="side-label">数据看板</span></div>
+      <div class="side-item" onclick="location.href='/'" title="设备总览"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3.3 7L12 12l8.7-5M12 22V12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="side-label">设备总览</span></div>
+      <div class="side-item" title="设备拓扑"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="18" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="12" r="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M8 7l8 4M8 17l8-4" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="side-label">设备拓扑</span></div>
+      <div class="side-item" title="工单管理"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="side-label">工单管理</span></div>
+      <div class="side-item" title="现场站点"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 10c0 6-8 11-8 11s-8-5-8-11a8 8 0 0116 0z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="side-label">现场站点</span></div>
+      <div class="side-item" title="智能分析"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span><span class="side-label">智能分析</span></div>
+      <div class="side-item" onclick="window.open('/swagger','_blank')" title="开发者中心(API 文档)"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M8 9l-3 3 3 3M16 9l3 3-3 3M13 5l-2 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="side-label">开发者中心</span></div>
+
+      <div class="side-spacer"></div>
+
+      <div class="side-item active" title="系统设置"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82 2 2 0 11-2.83 2.83 1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51 2 2 0 01-4 0 1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33 2 2 0 11-2.83-2.83A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1 2 2 0 010-4 1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82 2 2 0 112.83-2.83A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51 2 2 0 014 0 1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33 2 2 0 112.83 2.83A1.65 1.65 0 0019.4 9c.61.2 1.03.78 1 1.51a2 2 0 010 4z" stroke="currentColor" stroke-width="1.3"/></svg></span><span class="side-label">系统设置</span></div>
+      <div class="side-divider"></div>
+      <div class="side-item side-toggle" id="toggleBtn" onclick="toggleSidebar()" title="收起/展开">
+        <span class="side-ico-box"><svg class="tg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="side-label">收起菜单</span>
+      </div>
+    </nav>
+
+    <main class="content">
+      <div class="content-scroll">
+        <div class="kicker mono">ACCOUNT</div>
+        <h1 class="title">我的账号</h1>
+        <p class="subtitle">账号信息与 API 凭证</p>
+
+        <div class="card">
+          <div class="kv">用户名</div><div class="val" id="username">—</div>
+          <div class="kv">角色</div><div class="val" id="role">—</div>
+          <div class="kv">邮箱</div><div class="val" id="email">—</div>
+        </div>
+
+        <div class="card">
+          <h3>API 凭证</h3>
+          <div class="kv">API KEY</div><div class="vbox" id="apiKey">—</div>
+          <div id="secretBox" style="display:none">
+            <div class="kv">API SECRET(只此一次)</div><div class="vbox" id="apiSecret"></div>
+            <p class="warn">⚠️ 请立即保存,刷新后不再显示。</p>
+          </div>
+          <button class="btn ghost" id="regen">重置 API 凭证</button>
+          <p class="hint">重置后旧 Key/Secret 立即失效,已对接的 App 需更新。</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function toggleSidebar(){
+      var s=document.getElementById('sidebar');s.classList.toggle('collapsed');
+      var l=document.querySelector('#toggleBtn .side-label');l.textContent=s.classList.contains('collapsed')?'展开菜单':'收起菜单';
+    }
+    const $=id=>document.getElementById(id);
+    async function load(){
+      const r=await fetch('/auth/me');
+      if(r.status===401){location.href='/login.html?next=/account.html';return;}
+      const d=await r.json();
+      $('username').textContent=d.username; $('role').textContent=d.role; $('email').textContent=d.email||'—';
+      $('apiKey').textContent=d.apiKey;
+    }
+    $('regen').addEventListener('click',async()=>{
+      if(!confirm('确定重置?旧凭证立即失效。'))return;
+      const r=await fetch('/auth/regenerate-key',{method:'POST'});
+      if(!r.ok){alert('重置失败');return;}
+      const d=await r.json(); $('apiKey').textContent=d.apiKey; $('apiSecret').textContent=d.apiSecret; $('secretBox').style.display='block';
+    });
+    $('logout').addEventListener('click',async()=>{await fetch('/auth/logout',{method:'POST'});location.href='/login.html';});
+    load();
+  </script>
+</body>
+</html>

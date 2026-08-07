@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>碳化硅反应器 · 六联罐增压进料系统</title>
+<!--
+  由 SiliconCarbideChipScreen.xaml 转换的组态画面 + 云端数据接入。
+  设计舞台 1456×553,所有元素绝对定位坐标与 XAML 一致,整屏 Uniform 缩放居中。
+  图片目录:/img/scc/(scc_bg / scc_tanks / scc_pump / scc_arrow / scc_pipe.png,缺图显示占位框)
+  遥测键:t1~t6 press mode svPercent pSv on almStatus;命令:setSvPercent onOff alarmReset alarmSilence
+-->
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:#000;
+    font-family:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,-apple-system,sans-serif; }
+
+  /* ── 顶栏(与其它面板一致的信息位,但配色贴合黑色组态屏)── */
+  #tbar{ position:fixed; left:0; top:0; right:0; height:44px; z-index:100;
+    display:flex; align-items:center; gap:10px; padding:0 12px;
+    background:#111013; border-bottom:1px solid #26262b; }
+  #tbar .back{ color:#9a9aa2; text-decoration:none; font-size:13px; padding:5px 9px; border-radius:6px; }
+  #tbar .back:hover{ background:#222226; color:#e8e8ee; }
+  #tbar .tt{ color:#e8e8ee; font-size:14px; font-weight:700; white-space:nowrap; }
+  #tbar .dn{ color:#88888f; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #tbar .sp{ flex:1; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+    padding:4px 10px; border-radius:20px; border:1px solid #33333a; color:#88888f; white-space:nowrap; }
+  .chip .d{ width:7px; height:7px; border-radius:50%; background:#555; }
+  .chip.on{ color:#59d98a; border-color:rgba(53,199,89,.4); } .chip.on .d{ background:#35c759; }
+  .chip.alm{ color:#ff6b6b; border-color:rgba(224,72,72,.5); animation:blink 1s step-end infinite; }
+  .chip.alm .d{ background:#e04848; }
+  @keyframes blink{ 50%{ opacity:.45; } }
+  .tbtn{ background:#2a2a30; border:1px solid #3a3a40; border-radius:6px; color:#d8d8de;
+    font-size:12px; font-weight:600; padding:6px 13px; cursor:pointer; white-space:nowrap; font-family:inherit; }
+  .tbtn:hover{ background:#34343b; }
+  .tbtn.warn{ border-color:rgba(224,72,72,.45); color:#ff8383; }
+
+  #viewport{ position:fixed; left:0; top:44px; right:0; bottom:0;
+    display:flex; align-items:center; justify-content:center; background:#000; overflow:hidden; }
+
+  /* 设计舞台:1456×553(=原 XAML Canvas),整体缩放居中 */
+  #stage{ position:relative; width:1456px; height:553px; background:#0A0809; overflow:hidden; transform-origin:center center; flex:none; }
+
+  /* 图片:绝对定位;加载失败(onerror 置 .miss)时保留虚线占位框 */
+  .img{ position:absolute; display:block; background:#141418; outline:1px dashed rgba(255,255,255,.08); outline-offset:-1px; }
+  .img.fill{ object-fit:fill; }        /* Stretch=Fill */
+  .img.uniform{ object-fit:contain; }  /* Stretch=Uniform */
+  #stage>.img.bg{ outline:none; background:#0A0809; }
+  .img.miss{ outline:1px dashed rgba(255,255,255,.14); }
+
+  /* 进/出口标牌 */
+  .port{ position:absolute; border-radius:5px; padding:7px 14px; border:1px solid #5A5A5E;
+    background:linear-gradient(180deg,#4A4A4E 0%,#2C2C30 100%); color:#CFCFD4; font-size:20px; font-weight:bold; white-space:nowrap; }
+
+  /* 六罐温度框 */
+  .temps{ position:absolute; }
+  .tbox{ position:absolute; top:0; width:120px; border-radius:5px; padding:5px 10px;
+    background:rgba(40,40,44,.85); border:1px solid rgba(120,120,130,.30); text-align:center; }
+  .tbox .t{ color:#E8E8EE; font-size:18px; font-weight:bold; }
+
+  /* 右下控制面板 */
+  .ctrl{ position:absolute; }
+  .ctrl-box{ background:rgba(18,16,18,.62); border:1px solid rgba(150,150,150,.25); border-radius:7px; padding:13px 16px; }
+  .bars{ display:flex; gap:5px; margin-bottom:12px; }
+  .bars span{ width:15px; height:6px; background:#D8D8DE; }
+  .lbl{ color:#C8C8CE; font-size:18px; font-weight:600; }
+  .row-sv{ display:grid; grid-template-columns:54px 1fr; align-items:center; margin-bottom:11px; }
+  .sv-input{ width:100%; background:#2A2A30; border:1px solid #3A3A40; border-radius:4px; color:#fff;
+    font-family:inherit; font-size:20px; font-weight:bold; text-align:center; padding:4px; outline:none; }
+  .sv-input:focus{ border-color:#6A6A72; }
+  .sv-input:disabled{ color:#77777e; }
+  .row-p{ display:grid; grid-template-columns:54px 1fr auto; align-items:center; }
+  .p-box{ background:#2A2A30; border:1px solid #3A3A40; border-radius:4px; color:#fff; font-size:20px; font-weight:bold; text-align:center; padding:4px; }
+  .bar-unit{ color:#E0E0E6; font-size:18px; font-weight:bold; margin-left:8px; }
+
+  .toggle-row{ display:flex; align-items:center; margin-top:11px; }
+  .auto-btn{ background:#3A3A3E; border:1px solid #555555; border-radius:6px; padding:12px 16px; color:#DCDCE0; font-size:18px; font-weight:600; white-space:nowrap; }
+  .valve{ position:relative; width:100px; height:44px; margin-left:12px; cursor:pointer; user-select:none; }
+  .valve-track{ position:absolute; inset:0; border-radius:22px; background:#E04848; transition:background .25s ease; }
+  .valve.on .valve-track{ background:#35C759; }
+  .valve-text{ position:absolute; top:0; height:100%; left:16px; display:flex; align-items:center; color:#fff; font-size:16px; font-weight:bold; }
+  .valve.on .valve-text{ left:auto; right:16px; }
+  .valve-knob{ position:absolute; top:6px; right:6px; width:32px; height:32px; border-radius:16px; background:#fff; transition:left .25s ease, right .25s ease; }
+  .valve.on .valve-knob{ right:auto; left:6px; }
+
+  /* 指令下发中 —— 遮罩 + 加载卡片(与其它面板一致) */
+  .ctl-pending-mask{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;
+    background:rgba(12,12,15,.45);backdrop-filter:blur(2px);cursor:wait}
+  .ctl-pending-card{display:flex;align-items:center;gap:14px;padding:18px 26px;border-radius:12px;
+    background:#1a191c;border:1px solid rgba(53,199,89,.35);
+    box-shadow:0 12px 40px rgba(0,0,0,.55),0 0 24px rgba(53,199,89,.25)}
+  .ctl-pending-spin{width:26px;height:26px;border-radius:50%;flex:none;
+    border:3px solid rgba(53,199,89,.22);border-top-color:#35c759;
+    animation:ctlspin .8s linear infinite}
+  @keyframes ctlspin{to{transform:rotate(360deg)}}
+  .ctl-pending-txt{color:#f2f3f5;font-size:15px}
+  .ctl-pending-txt em{font-style:normal;color:#59d98a;font-weight:700}
+  .ctl-pending-sub{color:#8d93a0;font-size:12px;margin-top:3px}
+
+  /* 手机横屏等矮窗口:顶栏收紧 */
+  @media (max-height:520px){
+    #tbar{ height:36px; gap:7px; padding:0 8px; }
+    #tbar .tt{ font-size:12.5px; } #tbar .dn{ font-size:11px; }
+    .tbtn{ padding:4px 10px; font-size:11px; }
+    #viewport{ top:36px; }
+  }
+</style>
+</head>
+<body>
+<div id="tbar">
+  <a class="back" href="/">← 返回</a>
+  <span class="tt">碳化硅反应器 · 六联罐增压进料</span>
+  <span class="dn" id="devName"></span>
+  <span class="sp"></span>
+  <span class="chip" id="linkChip"><span class="d"></span><span id="linkTxt">连接中</span></span>
+  <span class="chip alm" id="almChip" style="display:none"><span class="d"></span>报警</span>
+  <button class="tbtn warn" id="btnReset">复位</button>
+  <button class="tbtn" id="btnSilence">消音</button>
+</div>
+
+<div id="viewport">
+  <div id="stage">
+
+    <!-- 背景 -->
+    <img class="img bg fill" src="/img/scc/scc_bg.png" alt="" style="left:0;top:0;width:1456px;height:553px">
+
+    <!-- 管道 3 段(主管 top=217,粗 11;位于罐组/水泵之后) -->
+    <img class="img pipe fill" src="/img/scc/scc_pipe.png" alt="" style="left:131px;top:217px;width:36px;height:11px">
+    <img class="img pipe fill" src="/img/scc/scc_pipe.png" alt="" style="left:1063px;top:217px;width:189px;height:11px">
+    <img class="img pipe fill" src="/img/scc/scc_pipe.png" alt="" style="left:1245px;top:217px;width:73px;height:11px">
+
+    <!-- 罐组(六联罐) -->
+    <img class="img uniform" src="/img/scc/scc_tanks.png" alt="" style="left:167px;top:72px;width:903px;height:377px">
+
+    <!-- 水泵 -->
+    <img class="img uniform" src="/img/scc/scc_pump.png" alt="" style="left:1150px;top:122px;width:95px;height:159px">
+
+    <!-- 进口 标牌 + 箭头 -->
+    <div class="port" style="left:15px;top:201px">进口</div>
+    <img class="img uniform" src="/img/scc/scc_arrow.png" alt="" style="left:95px;top:205px;width:44px;height:31px">
+
+    <!-- 出口 箭头 + 标牌 -->
+    <img class="img uniform" src="/img/scc/scc_arrow.png" alt="" style="left:1290px;top:205px;width:44px;height:31px">
+    <div class="port" style="left:1338px;top:201px">出口</div>
+
+    <!-- 六罐温度框(容器 167,453 · 903×40) -->
+    <div class="temps" style="left:167px;top:453px;width:903px;height:40px">
+      <div class="tbox" style="left:10px"><span class="t" id="T1">--</span></div>
+      <div class="tbox" style="left:158px"><span class="t" id="T2">--</span></div>
+      <div class="tbox" style="left:306px"><span class="t" id="T3">--</span></div>
+      <div class="tbox" style="left:454px"><span class="t" id="T4">--</span></div>
+      <div class="tbox" style="left:602px"><span class="t" id="T5">--</span></div>
+      <div class="tbox" style="left:750px"><span class="t" id="T6">--</span></div>
+    </div>
+
+    <!-- 右下控制面板(1098,287 · 宽340) -->
+    <div class="ctrl" style="left:1098px;top:287px;width:340px">
+      <div class="ctrl-box">
+        <div class="bars"><span></span><span></span><span></span><span></span><span></span></div>
+        <!-- SV% 可编辑(Enter 或失焦下发) -->
+        <div class="row-sv">
+          <span class="lbl">SV%</span>
+          <input class="sv-input" id="svPercent" value="--" inputmode="numeric" onfocus="this.select()">
+        </div>
+        <!-- 压力 只读 -->
+        <div class="row-p">
+          <span class="lbl">P</span>
+          <div class="p-box" id="press">--</div>
+          <span class="bar-unit">Bar</span>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <div class="auto-btn">自动输出</div>
+        <div class="valve" id="valve">
+          <div class="valve-track"></div>
+          <div class="valve-text">OFF</div>
+          <div class="valve-knob"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="ctl-pending-mask" id="pend" style="display:none">
+  <div class="ctl-pending-card">
+    <div class="ctl-pending-spin"></div>
+    <div>
+      <div class="ctl-pending-txt">正在下发:<em id="pendTxt"></em></div>
+      <div class="ctl-pending-sub">写入设备并回读校验中,请稍候…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const code=new URLSearchParams(location.search).get('code')||'';
+const DEMO=/[?&]demo=1/.test(location.search)||!code;   // 无 code 自动进演示模式
+const $=id=>document.getElementById(id);
+
+/* ---------- 状态 ---------- */
+const S={ t:[null,null,null,null,null,null], press:null, svPercent:null, pSv:null, mode:null,
+          on:false, alm:false, online:false, canControl:false, devName:'' };
+let pending=null, editingSv=false;
+
+/* ---------- 渲染 ---------- */
+const BLANK='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+document.querySelectorAll('#stage img.img').forEach(im=>{
+  im.addEventListener('error',()=>{ if(im.src!==BLANK){ im.classList.add('miss'); im.src=BLANK; } });
+});
+function render(){
+  for(let i=0;i<6;i++)
+    $('T'+(i+1)).textContent = S.t[i]==null ? '--' : S.t[i].toFixed(1)+' ℃';
+  $('press').textContent = S.press==null ? '--' : S.press.toFixed(2);
+  if(!editingSv) $('svPercent').value = S.svPercent==null ? '--' : S.svPercent;
+  const v=$('valve');
+  v.classList.toggle('on',!!S.on);
+  v.querySelector('.valve-text').textContent = S.on?'ON':'OFF';
+  const lc=$('linkChip');
+  lc.classList.toggle('on',S.online||DEMO);
+  $('linkTxt').textContent = DEMO?'演示模式':(S.online?'在线':'离线');
+  $('almChip').style.display = S.alm?'':'none';
+  $('devName').textContent = S.devName;
+}
+
+/* ---------- 数据接入 ---------- */
+const loginRedirect=()=>{location.href='/login.html?next='+encodeURIComponent(location.pathname+location.search)};
+async function loadMeta(){
+  if(DEMO){S.canControl=true;S.devName='演示 · 未绑定设备';return}
+  try{
+    const r=await fetch('/web/devices');
+    if(r.status===401)return loginRedirect();
+    const d=(await r.json()).find(x=>x.code===code);
+    if(d){S.devName=(d.name||code)+' · '+code;S.canControl=!!d.canControl}
+  }catch(e){}
+}
+async function loadTel(){
+  if(DEMO)return;
+  try{
+    const r=await fetch('/web/devices/'+encodeURIComponent(code)+'/telemetry');
+    if(r.status===401)return loginRedirect();
+    if(!r.ok)return;
+    const j=await r.json();
+    S.online=!!j.online;
+    if(j.online&&j.values){
+      const v=j.values;
+      for(let i=0;i<6;i++) if(typeof v['t'+(i+1)]==='number')S.t[i]=v['t'+(i+1)];
+      if(typeof v.press==='number')S.press=v.press;
+      if(typeof v.svPercent==='number')S.svPercent=v.svPercent;
+      if(typeof v.pSv==='number')S.pSv=v.pSv;
+      if(typeof v.mode==='number')S.mode=v.mode;
+      if(typeof v.on==='boolean')S.on=v.on;
+      if(typeof v.almStatus==='boolean')S.alm=v.almStatus;
+    }
+    render();
+  }catch(e){}
+}
+
+/* ---------- 控制下发 ---------- */
+const pendEl=$('pend');
+async function control(command,value,label){
+  if(!S.canControl){alert('无该设备控制权限');return false}
+  if(pending)return false;
+  if(DEMO)return demoControl(command,value);
+  pending=label||command;
+  pendEl.style.display='flex';
+  $('pendTxt').textContent=pending;
+  try{
+    const r=await fetch('/web/devices/'+encodeURIComponent(code)+'/control',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({command,value})
+    });
+    if(r.status===401){loginRedirect();return false}
+    const j=await r.json().catch(()=>({}));
+    console.info('[sicchip] control',command,value,'HTTP',r.status,j);
+    if(!(r.ok&&j.ok))alert((j&&j.error)?j.error+'(HTTP '+r.status+')':'下发失败(HTTP '+r.status+')');
+    await loadTel();
+    return r.ok&&j.ok;
+  }catch(e){
+    console.error('[sicchip] control 网络异常',command,value,e);
+    alert('下发失败:无法连接服务器('+((e&&e.message)||e)+')');
+    return false;
+  }
+  finally{pending=null;pendEl.style.display='none';render()}
+}
+function demoControl(command,value){
+  if(command==='setSvPercent')S.svPercent=value;
+  else if(command==='onOff')S.on=value!==0;
+  else if(command==='alarmReset')S.alm=false;
+  render();return true;
+}
+
+/* ---------- 事件 ---------- */
+$('valve').addEventListener('click',()=>{
+  control('onOff',S.on?0:1,S.on?'背压阀 OFF':'背压阀 ON');
+});
+const svEl=$('svPercent');
+svEl.addEventListener('focus',()=>{editingSv=true});
+svEl.addEventListener('blur',()=>{editingSv=false;commitSv()});
+svEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter')svEl.blur();
+  if(e.key==='Escape'){svEl.value=S.svPercent==null?'--':S.svPercent;svEl.blur()}
+});
+function commitSv(){
+  const n=parseFloat(svEl.value);
+  if(!isFinite(n)||n<0||n>100){render();return}
+  const v=Math.round(n);
+  if(v===S.svPercent){render();return}
+  control('setSvPercent',v,'SV% = '+v);
+}
+$('btnReset').addEventListener('click',()=>control('alarmReset',1,'报警复位'));
+$('btnSilence').addEventListener('click',()=>control('alarmSilence',1,'报警消音'));
+
+/* ---------- 演示模式本地模拟 ---------- */
+if(DEMO){
+  S.t=[126.4,158.2,171.5,169.8,163.0,142.7];S.press=3.42;S.svPercent=35;S.pSv=5;S.on=false;S.online=true;
+  setInterval(()=>{
+    for(let i=0;i<6;i++){
+      const tgt=S.on?150+i*12:25;
+      S.t[i]+= (tgt-S.t[i])*0.02 + (Math.random()-0.5)*0.6;
+    }
+    const ptgt=S.on?(S.svPercent/100)*10:0.2;
+    S.press=Math.max(0,S.press+(ptgt-S.press)*0.08+(Math.random()-0.5)*0.04);
+    render();
+  },1000);
+}
+
+/* ---------- 整屏 Uniform 缩放居中(扣除顶栏高度) ---------- */
+(function(){
+  const DW=1456, DH=553, stage=$('stage');
+  function fit(){
+    const barH=$('tbar').getBoundingClientRect().height;
+    const s=Math.min(window.innerWidth/DW,(window.innerHeight-barH)/DH);
+    stage.style.transform='scale('+s+')';
+  }
+  window.addEventListener('resize',fit);
+  window.addEventListener('orientationchange',()=>setTimeout(fit,120));
+  fit();
+})();
+
+/* ---------- 启动 ---------- */
+(async()=>{
+  await loadMeta();
+  render();
+  if(!DEMO){ await loadTel(); setInterval(loadTel,2000); }
+})();
+</script>
+</body>
+</html>

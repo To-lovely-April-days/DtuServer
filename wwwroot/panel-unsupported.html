@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>暂无控制面板 · MaxChemical</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:644px;overflow:hidden}
+    body{
+      font-family:'Inter','Noto Sans SC',system-ui,sans-serif;color:#f5f6fb;
+      display:flex;align-items:center;justify-content:center;text-align:center;padding:40px;
+      background:
+        radial-gradient(1200px 700px at 12% 8%, rgba(70,70,78,.45), transparent 60%),
+        radial-gradient(900px 800px at 92% 100%, rgba(120,24,38,.42), transparent 55%),
+        linear-gradient(155deg,#131316 0%,#0e0e11 45%,#160d10 100%);
+    }
+    .box{max-width:520px}
+    .ic{width:64px;height:64px;margin:0 auto 22px;border-radius:18px;display:flex;align-items:center;justify-content:center;
+      background:rgba(224,57,76,.14);border:1px solid rgba(224,57,76,.4);color:#e0394c}
+    h1{font-size:20px;font-weight:600;margin-bottom:12px}
+    p{font-size:14px;line-height:1.9;color:#9aa0bd}
+    .tag{display:inline-block;margin-top:18px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+      color:#cfd2e6;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05)}
+    .hint{margin-top:22px;font-size:12.5px;color:#66666f}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="ic">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+    <h1>该型号暂未配置控制面板</h1>
+    <p>这台设备的型号还没有在「型号目录」里绑定专属操作面板。<br/>
+       在 <b>DeviceModelCatalog</b> 给该型号配上 PanelUrl,或先用支持的型号创建设备。</p>
+    <div class="tag" id="tag">型号:—</div>
+    <div class="hint" id="codeTag"></div>
+  </div>
+  <script>
+    const q=new URLSearchParams(location.search);
+    const type=q.get('type')||'';
+    document.getElementById('tag').textContent='型号:'+(type||'未指定');
+    const code=q.get('code')||'';
+    if(code) document.getElementById('codeTag').textContent='序列号 '+code;
+  </script>
+</body>
+</html>

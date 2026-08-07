@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 电磁阀:蝶形阀 + 电磁线圈 -->
+  <path d="M18 40 L50 60 L18 80 Z" fill="#ffffff" stroke="#2b3038" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M82 40 L50 60 L82 80 Z" fill="#ffffff" stroke="#2b3038" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="38" y="14" width="24" height="18" rx="2" fill="#A41626" stroke="#2b3038" stroke-width="2"/>
+  <path d="M43 18 L43 28 M50 18 L50 28 M57 18 L57 28" stroke="#fff" stroke-width="2"/>
+  <line x1="50" y1="32" x2="50" y2="60" stroke="#2b3038" stroke-width="3"/>
+</svg>

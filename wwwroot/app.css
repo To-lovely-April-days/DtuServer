@@ -1,0 +1,131 @@
+/* ============================================================
+   MaxChemical 物联网平台 · 设计系统
+   对齐「吃出自愈力」官网:Tesla 配色 + 大留白 + 柔圆角(11/16px)
+   + 柔和大扩散阴影 + 大号自信排版
+   ============================================================ */
+:root{
+  --blue:#3E6AE1; --accent:#3E6AE1; --accent-bright:#3E6AE1; --accent-hover:#3056c9;
+  --accent-tint:#EEF2FD;
+  --green:#15803D; --green-bright:#15803D; --green-tint:#E9F7EE;
+  --red:#C0322B; --amber:#B45309;
+
+  --ink:#171A20; --on-dark:#171A20;     /* 主文字 */
+  --graphite:#393C41; --body:#393C41;   /* 正文 */
+  --pewter:#5C5E62;                     /* 次级 */
+  --silver:#8E8E8E; --mute:#8E8E8E;     /* 弱化/占位 */
+  --cloud:#EAEBEC; --glass-line:#EAEBEC;        /* 发丝线 */
+  --glass-line-2:#D0D1D2;               /* 输入边框 */
+  --mist:#F6F7F9; --bg-1:#F6F7F9;       /* 次级表面 */
+  --ash:#F4F4F4;
+
+  --bg-0:#FFFFFF; --glass:#FFFFFF; --glass-soft:#F6F7F9; --glass-bright:#FFFFFF;
+
+  --elev:0 2px 4px rgba(18,20,35,.03),0 18px 44px -18px rgba(18,20,35,.13);
+  --elev-lg:0 60px 110px -52px rgba(18,20,35,.40),0 24px 54px -30px rgba(18,20,35,.16);
+  --shadow-sm:var(--elev); --shadow-md:var(--elev); --shadow-lg:var(--elev-lg);
+
+  --rc:16px; --rb:11px;
+  --r-card:16px; --r-mid:11px; --r-sm:8px; --r-chip:999px;
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Segoe UI",Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:var(--font);color:var(--ink);background:var(--bg-0);font-weight:400;
+  line-height:1.6;letter-spacing:-.004em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+a{color:inherit;text-decoration:none}
+svg{display:block}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
+
+.app-bg{min-height:100vh;background:var(--bg-0)}
+
+/* ---- nav ---- */
+.nav{position:sticky;top:0;z-index:100;height:64px;display:flex;align-items:center;gap:28px;padding:0 40px;
+  background:rgba(255,255,255,.74);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);
+  border-bottom:1px solid var(--cloud)}
+.brand{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
+.brand .mark{width:24px;height:24px;border-radius:7px;background:var(--blue);display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
+.brand b{color:var(--blue);font-weight:500}
+.nav .sp{flex:1}
+.nav .link{font-size:14px;font-weight:400;color:var(--pewter);transition:color .15s}
+.nav .link:hover{color:var(--ink)}
+.nav .link.active{color:var(--ink);font-weight:500}
+
+/* ---- 状态 pill / 点 ---- */
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--pewter);
+  background:var(--mist);border:1px solid var(--cloud);padding:7px 14px;border-radius:var(--r-chip)}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.ok{background:var(--green)} .dot.bad{background:var(--silver)}
+
+/* ---- 容器 ---- */
+.wrap{max-width:1140px;margin:0 auto;padding:0 40px}
+
+/* eyebrow + 标题 */
+.eyebrow{display:inline-flex;align-items:center;font-size:13px;font-weight:500;color:var(--blue);letter-spacing:.01em}
+.eyebrow::before{content:"";width:20px;height:2px;border-radius:1px;background:var(--blue);margin-right:10px}
+.page-head{padding:72px 0 0}
+.page-head h1{font-size:clamp(32px,3.6vw,44px);font-weight:500;letter-spacing:-.03em;line-height:1.14;margin:18px 0 0}
+.page-head p{font-size:18px;color:var(--pewter);margin:18px 0 0;line-height:1.62}
+
+/* ---- 卡片 ---- */
+.card{background:#fff;border:1px solid var(--cloud);border-radius:var(--rc);box-shadow:var(--elev)}
+.card-pad{padding:28px 30px}
+
+/* ---- 图标方块 ---- */
+.iconbox{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:none;
+  background:var(--accent-tint);color:var(--blue)}
+.iconbox.gray{background:var(--mist);color:var(--silver)}
+.iconbox.green{background:var(--green-tint);color:var(--green)}
+
+/* ---- 输入 ---- */
+.lab{font-size:12px;color:var(--pewter);font-weight:500;display:block;margin-bottom:8px}
+.inp{height:50px;width:100%;padding:0 16px;border:1px solid var(--cloud);border-radius:var(--rb);
+  background:var(--mist);color:var(--ink);font-size:15px;font-family:inherit;outline:none;transition:border-color .15s,background .15s}
+.inp:focus{border-color:var(--blue);background:#fff}
+.inp::placeholder{color:var(--silver)}
+
+/* ---- 按钮 ---- */
+.btn{height:50px;padding:0 26px;border:none;border-radius:var(--rb);background:var(--blue);color:#fff;
+  font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,box-shadow .15s,border-color .15s,color .15s}
+.btn:hover{background:var(--accent-hover)}
+.btn.ghost{background:#fff;color:var(--graphite);border:1px solid var(--cloud)}
+.btn.ghost:hover{background:var(--mist);color:var(--ink)}
+.btn.danger{background:#fff;color:var(--red);border:1px solid var(--cloud)}
+.btn.danger:hover{background:#FBF1F0;border-color:#F0D5D3}
+.btn.sm{height:38px;padding:0 16px;font-size:13.5px;border-radius:9px}
+
+/* ---- 状态徽标 ---- */
+.badge{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:500;
+  padding:6px 13px;border-radius:var(--r-chip);white-space:nowrap}
+.badge.on{color:var(--green);background:var(--green-tint)}
+.badge.off{color:var(--pewter);background:var(--mist)}
+
+/* ---- 表格 ---- */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:16px;font-size:14.5px;border-bottom:1px solid var(--cloud)}
+th{color:var(--pewter);font-weight:500;font-size:13px}
+tbody tr:last-child td{border-bottom:none}
+tbody tr{transition:background .15s}
+tbody tr:hover td{background:#FAFBFC}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* ---- 居中认证页 ---- */
+.auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--bg-0)}
+.auth .box{width:420px;max-width:92vw}
+.auth .card{padding:40px 38px}
+.auth .logo{display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:500;margin-bottom:22px}
+.auth .logo .mark{width:26px;height:26px;border-radius:7px;background:var(--blue);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
+.auth h1{font-size:27px;font-weight:500;letter-spacing:-.02em;color:var(--ink);margin-bottom:8px;text-align:center}
+.auth .sub{font-size:15px;color:var(--pewter);margin-bottom:28px;text-align:center;line-height:1.6}
+.auth form{display:flex;flex-direction:column;gap:13px}
+.auth .btn{width:100%}
+.auth .alt{font-size:14px;color:var(--pewter);margin-top:22px;text-align:center}
+.auth .alt a{color:var(--blue);font-weight:500}
+.err{color:var(--red);font-size:13.5px;min-height:18px}
+
+/* ---- 模态 ---- */
+.mask{position:fixed;inset:0;background:rgba(23,26,32,.42);display:none;align-items:center;justify-content:center;z-index:120}
+.modal{width:460px;max-width:92vw;max-height:88vh;overflow:auto;padding:30px;background:#fff;border-radius:var(--rc);box-shadow:var(--elev-lg)}
+.modal h3{font-size:18px;font-weight:500;margin-bottom:18px}
+.close{float:right;cursor:pointer;color:var(--silver);font-size:24px;line-height:1}
+.close:hover{color:var(--ink)}

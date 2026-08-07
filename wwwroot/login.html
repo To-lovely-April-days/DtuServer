@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>登录 · MaxChemical 物联网平台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --accent:#A41626; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Public Sans','Noto Sans SC',-apple-system,BlinkMacSystemFont,sans-serif;color:#1a1d24;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .login{min-height:100vh;display:grid;grid-template-columns:1.05fr 0.95fr;background:#f5f6f8}
+
+  /* LEFT brand panel */
+  .brand-panel{position:relative;overflow:hidden;padding:56px 60px;display:flex;flex-direction:column;justify-content:space-between;
+    background:radial-gradient(120% 120% at 0% 0%, #ffffff 0%, #faf3f4 52%, #f3eef0 100%);border-right:1px solid #e7e3e6}
+  .grid-bg{position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(rgba(20,20,30,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(20,20,30,.04) 1px,transparent 1px);
+    background-size:56px 56px;animation:drift 32s linear infinite}
+  @keyframes drift{from{background-position:0 0,0 0}to{background-position:56px 56px,56px 56px}}
+  .halo{position:absolute;width:540px;height:540px;right:-170px;top:-150px;border-radius:50%;
+    background:radial-gradient(circle, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 70%);pointer-events:none}
+  .bp-head{position:relative;display:flex;align-items:center;gap:13px}
+  .bp-name{font-size:18px;font-weight:700;letter-spacing:.14em}
+  .bp-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.18em;color:#8a8f99;border:1px solid #dcdde1;border-radius:4px;padding:3px 7px;margin-left:2px}
+  .bp-mid{position:relative;max-width:460px}
+  .kicker{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.22em;color:var(--accent);margin-bottom:22px;font-weight:500}
+  .bp-mid h1{font-size:42px;line-height:1.14;font-weight:700;margin:0 0 20px;letter-spacing:-.015em;color:#14161c}
+  .bp-mid .sub{font-size:15.5px;line-height:1.65;color:#5b6472;max-width:400px}
+  .stats{display:flex;gap:40px;margin-top:44px}
+  .stats .n{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;color:#14161c}
+  .stats .l{font-size:12px;color:#7b8492;margin-top:5px;letter-spacing:.04em}
+  .bp-foot{position:relative;display:flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#7b8492}
+  .pulse{width:8px;height:8px;border-radius:50%;background:#16a34a;box-shadow:0 0 8px rgba(22,163,74,.5);animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+
+  /* RIGHT form */
+  .form-panel{position:relative;display:flex;flex-direction:column;padding:44px 64px;background:#fff}
+  .lang{display:flex;justify-content:flex-end;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:12px}
+  .lang button{background:none;border:none;cursor:pointer;font-family:inherit;font-size:12px;padding:2px 4px;color:#9aa3af}
+  .lang button.on{color:#14161c;font-weight:600}
+  .lang span{color:#c8ccd2}
+  .form-mid{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:380px;width:100%;margin:0 auto}
+  .form-mid h2{font-size:28px;font-weight:700;margin:0 0 8px;letter-spacing:-.01em;color:#14161c}
+  .form-mid .subtitle{font-size:14px;color:#6b7382;margin:0 0 34px}
+  .flabel{display:block;font-size:12.5px;font-weight:600;color:#3f4754;margin-bottom:8px;letter-spacing:.01em}
+  .frow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .frow .flabel{margin-bottom:0}
+  .frow a{font-size:12.5px;color:var(--accent);font-weight:500}
+  .finput{width:100%;height:48px;padding:0 15px;background:#fff;border:1px solid #d7dae0;border-radius:8px;color:#1a1d24;
+    font-size:14.5px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+  .finput::placeholder{color:#aab1bd}
+  .finput:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent)}
+  .mb20{margin-bottom:20px} .mb18{margin-bottom:18px}
+  .remember{display:flex;align-items:center;gap:9px;font-size:13px;color:#5b6472;margin-bottom:26px;cursor:pointer;user-select:none}
+  .remember input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+  .btn-primary{width:100%;height:50px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;
+    font-family:inherit;cursor:pointer;letter-spacing:.01em;display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 1px 2px rgba(164,22,38,.25);transition:filter .15s,transform .05s}
+  .btn-primary:hover{filter:brightness(1.08)} .btn-primary:active{transform:translateY(1px)}
+  .divider{display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:24px 0}
+  .divider span.ln{flex:1;height:1px;background:#e6e8ec}
+  .divider span.or{font-family:'IBM Plex Mono',monospace;letter-spacing:.1em}
+  .btn-sso{width:100%;height:48px;background:#fff;color:#3f4754;border:1px solid #d7dae0;border-radius:8px;font-size:14px;font-weight:600;
+    font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;transition:background .15s,border-color .15s}
+  .btn-sso:hover{background:#f7f8fa;border-color:#c2c6cd}
+  .foot-link{text-align:center;font-size:12.5px;color:#7b8492;margin-top:28px}
+  .foot-link a{color:var(--accent);font-weight:600}
+  .err{color:var(--accent);font-size:13px;min-height:18px;margin-bottom:4px}
+
+  @media(max-width:880px){
+    .login{grid-template-columns:1fr}
+    .brand-panel{display:none}
+    .form-panel{padding:40px 26px}
+  }
+</style>
+</head>
+<body>
+  <div class="login">
+    <!-- LEFT 品牌面板 -->
+    <section class="brand-panel">
+      <div class="grid-bg"></div>
+      <div class="halo"></div>
+      <header class="bp-head">
+        <img src="/logo.svg" alt="MaxChemical" style="height:44px;width:auto;display:block" />
+        <span class="bp-name">MaxChemical</span>
+        <span class="bp-badge">IoT CLOUD</span>
+      </header>
+
+      <div class="bp-mid">
+        <div class="kicker" data-i18n="kicker">工业物联网平台</div>
+        <h1 data-i18n="headline">连接 · 监控 · 掌控<br>你的每一台设备</h1>
+        <p class="sub" data-i18n="sub">安全可靠的工业设备云平台:实时数据、远程操作、多用户授权,让分布各地的设备尽在掌握。</p>
+        <div class="stats">
+          <div><div class="n">2.4M+</div><div class="l" data-i18n="statDevices">接入设备</div></div>
+          <div><div class="n">99.98%</div><div class="l" data-i18n="statUptime">服务可用性</div></div>
+          <div><div class="n">SOC&nbsp;2</div><div class="l" data-i18n="statCompliant">数据合规</div></div>
+        </div>
+      </div>
+
+      <footer class="bp-foot">
+        <span class="pulse"></span>
+        <span data-i18n="systemStatus">系统运行正常</span>
+      </footer>
+    </section>
+
+    <!-- RIGHT 登录表单 -->
+    <section class="form-panel">
+      <div class="lang">
+        <button id="zhBtn" class="on" onclick="setLang('zh')">中文</button>
+        <span>/</span>
+        <button id="enBtn" onclick="setLang('en')">EN</button>
+      </div>
+
+      <div class="form-mid">
+        <h2 data-i18n="signInTitle">登录</h2>
+        <p class="subtitle" data-i18n="signInSub">登录以管理与监控你的设备</p>
+
+        <form id="f">
+          <label class="flabel" data-i18n="userLabel">用户名</label>
+          <input id="username" class="finput mb20" type="text" autocomplete="username" data-i18n-ph="userPh" placeholder="请输入用户名" />
+
+          <div class="frow">
+            <label class="flabel" data-i18n="pwdLabel">密码</label>
+            <a href="#" data-i18n="forgot" onclick="return false">忘记密码?</a>
+          </div>
+          <input id="password" class="finput mb18" type="password" autocomplete="current-password" data-i18n-ph="pwdPh" placeholder="请输入密码" />
+
+          <label class="remember"><input type="checkbox" id="remember" /> <span data-i18n="remember">记住我</span></label>
+
+          <div class="err" id="err"></div>
+
+          <button class="btn-primary" type="submit">
+            <span data-i18n="signInBtn">登录</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h9M8.5 4l4 4-4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </button>
+
+          <div class="divider"><span class="ln"></span><span class="or" data-i18n="or">或</span><span class="ln"></span></div>
+
+          <button class="btn-sso" type="button" onclick="ssoNotice()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="6.5" width="11" height="7.5" rx="1.4" stroke="#6b7382" stroke-width="1.4"></rect><path d="M5 6.5V4.8a3 3 0 0 1 6 0v1.7" stroke="#6b7382" stroke-width="1.4"></path></svg>
+            <span data-i18n="sso">企业 SSO 登录</span>
+          </button>
+        </form>
+
+        <div class="foot-link"><span data-i18n="noAccount">还没有账号?</span> <a href="/register.html" data-i18n="signup">注册</a></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const I18N = {
+      zh:{kicker:'工业物联网平台',headline:'连接 · 监控 · 掌控<br>你的每一台设备',
+        sub:'安全可靠的工业设备云平台:实时数据、远程操作、多用户授权,让分布各地的设备尽在掌握。',
+        statDevices:'接入设备',statUptime:'服务可用性',statCompliant:'数据合规',systemStatus:'系统运行正常',
+        signInTitle:'登录',signInSub:'登录以管理与监控你的设备',userLabel:'用户名',userPh:'请输入用户名',
+        pwdLabel:'密码',forgot:'忘记密码?',pwdPh:'请输入密码',remember:'记住我',signInBtn:'登录',or:'或',
+        sso:'企业 SSO 登录',noAccount:'还没有账号?',signup:'注册'},
+      en:{kicker:'INDUSTRIAL IoT PLATFORM',headline:'Connect · Monitor · Control<br>every device you own',
+        sub:'A secure industrial device cloud — real-time data, remote control and multi-user access. Your fleet, anywhere.',
+        statDevices:'Devices',statUptime:'Uptime',statCompliant:'Compliant',systemStatus:'All systems operational',
+        signInTitle:'Sign in',signInSub:'Sign in to manage and monitor your devices',userLabel:'Username',userPh:'Enter your username',
+        pwdLabel:'Password',forgot:'Forgot?',pwdPh:'Enter your password',remember:'Remember me',signInBtn:'Sign in',or:'OR',
+        sso:'Sign in with SSO',noAccount:"Don't have an account?",signup:'Sign up'}
+    };
+    function setLang(l){
+      const d=I18N[l];
+      document.documentElement.lang=(l==='zh'?'zh-CN':'en');
+      document.querySelectorAll('[data-i18n]').forEach(e=>{e.innerHTML=d[e.dataset.i18n]??e.innerHTML;});
+      document.querySelectorAll('[data-i18n-ph]').forEach(e=>{e.placeholder=d[e.dataset.i18nPh]??e.placeholder;});
+      zhBtn.classList.toggle('on',l==='zh'); enBtn.classList.toggle('on',l==='en');
+    }
+    function ssoNotice(){ alert('企业 SSO 即将开放'); }
+
+    const next = new URLSearchParams(location.search).get('next') || '/';
+    document.getElementById('f').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const err=document.getElementById('err'); err.textContent='';
+      const r=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:document.getElementById('username').value.trim(),password:document.getElementById('password').value})});
+      if(r.ok) location.href=next;
+      else{ const d=await r.json().catch(()=>({})); err.textContent=d.error||'用户名或密码错误'; }
+    });
+  </script>
+</body>
+</html>

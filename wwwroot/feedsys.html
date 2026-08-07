@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>进样控制 · 两液一气</title>
+<style>
+/* ============================================================
+   进样控制 · 两液一气 —— Tesla 结构(扁平/零阴影/4px/等宽数字)
+   配色品牌红体系:#A41626 主 · #e0394c 暗底亮红
+   数据接入:/web/devices/{code}/telemetry + /control(?demo=1 本地模拟)
+   ============================================================ */
+:root{
+  --bg:#121316; --panel:#1e1e24; --panel-2:#26262c; --inset:#0d0d10;
+  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.12);
+  --ink:#f6f6f8; --sub:#a4a4b0; --mute:#66666f;
+  --red:#A41626; --red-br:#e0394c; --red-dim:#5c1a22;
+  --gray-pipe:#47474e; --gray-body:#2a2a30; --gray-hi:#34343a; --gray-metal:#3e3e45;
+  --r:4px;
+  --font:'Inter','Noto Sans SC',-apple-system,'PingFang SC','Microsoft YaHei',Helvetica Neue,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{ width:100%; height:644px; overflow:hidden; font-family:var(--font); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
+#root{ width:100%; height:644px; background:var(--bg); display:grid; grid-template-rows:auto 1fr; overflow:hidden; }
+
+/* 顶部状态条 —— 同风格扁平 */
+.tbar{ display:flex; align-items:center; gap:14px; padding:10px 30px 0; }
+.tbar .back{ color:var(--sub); text-decoration:none; font-size:12px; padding:4px 8px; border:1px solid var(--line); border-radius:var(--r); }
+.tbar .back:hover{ border-color:var(--line-2); color:var(--ink); }
+.tbar .tt{ font-size:13px; font-weight:600; letter-spacing:1px; }
+.tbar .dn{ font-size:11px; color:var(--sub); }
+.tbar .sp{ flex:1; }
+.chip{ display:inline-flex; align-items:center; gap:5px; font-size:9px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; padding:4px 9px; border-radius:3px; border:1px solid var(--line); color:var(--sub); background:var(--panel); }
+.chip .d{ width:6px; height:6px; border-radius:50%; background:#55555c; }
+.chip.on{ color:#7ddba3; border-color:rgba(80,200,130,.3); background:rgba(80,200,130,.08); }
+.chip.on .d{ background:#3ecf7a; }
+.chip.alarm{ color:var(--red-br); border-color:rgba(224,57,76,.35); background:rgba(224,57,76,.12); }
+.chip.alarm .d{ background:var(--red-br); animation:blink 1s infinite; }
+@keyframes blink{50%{opacity:.25}}
+.tbtn{ font-family:var(--font); font-size:11px; font-weight:600; color:var(--sub); background:var(--panel-2); border:1px solid var(--line-2); border-radius:var(--r); padding:5px 12px; cursor:pointer; letter-spacing:1px; }
+.tbtn:hover{ color:var(--ink); border-color:rgba(255,255,255,.25); }
+.tbtn.warn{ color:var(--red-br); border-color:rgba(224,57,76,.4); }
+
+/* 一整块板 —— 三通道发丝线分隔 */
+.lanes{ margin:12px 30px 20px; background:var(--panel); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; display:grid; grid-template-rows:1fr 1fr 1fr; min-height:0; }
+.row{ position:relative; min-height:0; overflow:hidden; }
+.row + .row{ border-top:1px solid var(--line); }
+.row::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:#4a2028; z-index:1; }
+.row.on::before{ background:var(--red-br); }
+.row svg.pid{ width:100%; height:100%; display:block; }
+
+/* 可编辑 —— 红色 */
+.editable{ font-family:var(--font); font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums; background:transparent; border:1px solid transparent; padding:1px 5px; margin:0 -5px; border-radius:3px; cursor:pointer; transition:all .12s; font-size:15px; display:inline-block; }
+.editable:hover{ border-color:var(--line-2); background:var(--panel-2); }
+.editable.editing{ border:1px solid var(--red); background:var(--inset); cursor:text; outline:none; }
+.editable-input{ font-family:var(--font); font-size:15px; font-weight:500; color:var(--red-br); font-variant-numeric:tabular-nums; background:transparent; border:none; outline:none; padding:0; width:52px; text-align:left; }
+
+/* 读数 */
+.readout{ display:inline-flex; align-items:stretch; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; width:fit-content; }
+.ro-col{ display:flex; flex-direction:column; justify-content:center; padding:9px 16px; gap:9px; }
+.ro-col + .ro-col{ border-left:1px solid var(--line); }
+.ro-item{ display:flex; flex-direction:column; gap:3px; }
+.ro-item .lab{ font-size:8px; font-weight:500; color:var(--mute); letter-spacing:1.2px; text-transform:uppercase; white-space:nowrap; }
+.ro-item .line{ display:flex; align-items:baseline; gap:4px; }
+.ro-item .val{ font-size:20px; font-weight:400; letter-spacing:-.3px; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums; }
+.ro-item.dim .val{ font-size:15px; font-weight:500; }
+.ro-item .val.warn{ color:var(--red-br); }
+.ro-item .unit{ font-size:9px; font-weight:500; color:var(--sub); }
+.mini-chip{ display:inline-flex; align-items:center; gap:4px; font-size:8.5px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; padding:3px 8px; border-radius:3px; align-self:flex-start; }
+.mini-chip.run{ background:rgba(224,57,76,.14); color:var(--red-br); border:1px solid rgba(224,57,76,.3); }
+.mini-chip.idle{ background:var(--panel); color:var(--sub); border:1px solid var(--line); }
+
+/* 指令下发中 —— 遮罩 + 加载卡片(与反应釜面板一致) */
+.ctl-pending-mask{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;
+  background:rgba(12,12,15,.45);backdrop-filter:blur(2px);cursor:wait}
+.ctl-pending-card{display:flex;align-items:center;gap:14px;padding:18px 26px;border-radius:12px;
+  background:var(--panel);border:1px solid rgba(224,57,76,.35);
+  box-shadow:0 12px 40px rgba(0,0,0,.55),0 0 24px rgba(224,57,76,.4)}
+.ctl-pending-spin{width:26px;height:26px;border-radius:50%;flex:none;
+  border:3px solid rgba(224,57,76,.22);border-top-color:var(--red-br);
+  animation:ctlspin .8s linear infinite}
+@keyframes ctlspin{to{transform:rotate(360deg)}}
+.ctl-pending-txt{color:#f2f3f5;font-size:15px}
+.ctl-pending-txt em{font-style:normal;color:var(--red-br);font-weight:700}
+.ctl-pending-sub{color:#8d93a0;font-size:12px;margin-top:3px}
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="tbar">
+    <a class="back" href="/">← 返回</a>
+    <span class="tt">进样控制 · 两液一气</span>
+    <span class="dn" id="devName"></span>
+    <span class="sp"></span>
+    <span class="chip" id="linkChip"><span class="d"></span><span id="linkTxt">连接中</span></span>
+    <span class="chip" id="almChip" style="display:none"><span class="d"></span><span id="almTxt">报警</span></span>
+    <button class="tbtn warn" id="btnReset">复位</button>
+    <button class="tbtn" id="btnSilence">消音</button>
+  </div>
+  <div class="lanes" id="lanes"></div>
+</div>
+<div class="ctl-pending-mask" id="pend" style="display:none">
+  <div class="ctl-pending-card">
+    <div class="ctl-pending-spin"></div>
+    <div>
+      <div class="ctl-pending-txt">正在下发:<em id="pendTxt"></em></div>
+      <div class="ctl-pending-sub">写入设备并回读校验中,请稍候…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const RED='#e0394c', RED_DEEP='#A41626';
+const code=new URLSearchParams(location.search).get('code')||'';
+const DEMO=/[?&]demo=1/.test(location.search)||!code;   // 无 code 自动进演示模式
+
+/* 通道配置:key ↔ 遥测键前缀 ↔ 控制命令 */
+const LANES=[
+ {key:'gas', tagZh:'气体进样', tagEn:'GAS · MFC', srcType:'gas', deviceLabel:'MFC',
+  unit:'L/min', hasPressure:false,
+  tel:{on:'mfcOn',flow:'mfcFlow',fsv:'mfcFsv',add:'mfcAdd',ex:'mfcRangeHigh'},
+  addUnit:'L', exLab:'量程上限 Range', exUnit:'L/min', exMax:500,
+  cmd:{toggle:'mfcOnOff',sv:'setMfcFsv',ex:'setMfcRangeHigh'},
+  cmdName:{toggle:'MFC 通断',sv:'MFC 设定流量',ex:'MFC 量程上限'}},
+ {key:'liq1', tagZh:'液体进样 1', tagEn:'LIQUID · PUMP 1', srcType:'liq', deviceLabel:'泵 1',
+  unit:'mL/min', hasPressure:true, liq:'#a8823c', surfOn:'#d4a75a', surfOff:'#8a6a34',
+  tel:{on:'p1On',flow:'p1Flow',fsv:'p1Fsv',add:'p1Add',press:'p1P',ph:'p1PHigh',alm:'almP1',ex:'p1PHigh'},
+  addUnit:'mL', exLab:'压力上限 P-HI', exUnit:'MPa', exMax:60,
+  cmd:{toggle:'p1OnOff',sv:'setP1Fsv',ex:'setP1PHigh'},
+  cmdName:{toggle:'泵1 启停',sv:'泵1 设定流量',ex:'泵1 压力上限'}},
+ {key:'liq2', tagZh:'液体进样 2', tagEn:'LIQUID · PUMP 2', srcType:'liq', deviceLabel:'泵 2',
+  unit:'mL/min', hasPressure:true, liq:'#3a8274', surfOn:'#5ab5a0', surfOff:'#2f6659',
+  tel:{on:'p2On',flow:'p2Flow',fsv:'p2Fsv',add:'p2Add',press:'p2P',ph:'p2PHigh',alm:'almP2',ex:'p2PHigh'},
+  addUnit:'mL', exLab:'压力上限 P-HI', exUnit:'MPa', exMax:60,
+  cmd:{toggle:'p2OnOff',sv:'setP2Fsv',ex:'setP2PHigh'},
+  cmdName:{toggle:'泵2 启停',sv:'泵2 设定流量',ex:'泵2 压力上限'}},
+];
+const ST={};      /* 每通道状态 */
+LANES.forEach(c=>{ST[c.key]={on:false,flow:0,fsv:0,add:0,press:0,ph:1.5,ex:0,alm:false}});
+let online=false, canControl=false, almStatus=false, almComm=false;
+let pending=null, editingLane=null;
+
+/* ---------- 单通道 SVG(整段重绘;编辑中/下发中跳过该道) ---------- */
+function fitting(x,y){return `
+  <rect x="${x-4}" y="${y-4.5}" width="10" height="9" fill="#3e3e45"/>
+  <rect x="${x-9}" y="${y-9.5}" width="16" height="19" rx="1.5" fill="#35353b" stroke="rgba(255,255,255,.18)" stroke-width="1"/>
+  <line x1="${x-3.5}" y1="${y-8}" x2="${x-3.5}" y2="${y+8}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+  <line x1="${x+2}" y1="${y-8}" x2="${x+2}" y2="${y+8}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`}
+
+function laneSvg(cfg,s){
+  const K=cfg.key, on=s.on;               /* render() 已把在线状态并入 */
+  const isGas=cfg.srcType==='gas';
+  const PIPE_Y=62, srcConnX=isGas?84:74, VALVE_X=900;
+  const act=on?RED:RED_DEEP, stroke=on?RED:RED_DEEP, lcd=on?RED:'#7a2530';
+  const lvl=0.55, bodyY=102, bodyH=76;
+  const fillH=(bodyH-4)*lvl, surfaceY=bodyY+bodyH-2-fillH;
+  const pmax=s.ph>0?s.ph:1.5;
+  const src=isGas?`
+    <rect x="22" y="47" width="62" height="30" rx="4" fill="#26262c" stroke="rgba(255,255,255,.1)"/>
+    <text x="53" y="66" font-size="13" font-weight="500" fill="#a4a4b0" text-anchor="middle">进口</text>`
+  :`
+    <rect x="48" y="${bodyY}" width="52" height="${bodyH}" rx="4" fill="#191a1d" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+    <clipPath id="bc-${K}"><rect x="49" y="${bodyY+1}" width="50" height="${bodyH-2}" rx="3.5"/></clipPath>
+    <g clip-path="url(#bc-${K})">
+      <rect x="48" y="${surfaceY}" width="52" height="${bodyY+bodyH-2-surfaceY}" fill="${cfg.liq}"/>
+      <rect x="48" y="${surfaceY-1}" width="52" height="1.5" fill="${on?cfg.surfOn:cfg.surfOff}"/>
+    </g>
+    <rect x="70.5" y="58" width="7" height="${surfaceY-58}" fill="var(--gray-pipe)" stroke="rgba(255,255,255,.08)"/>
+    <rect x="68" y="${surfaceY-2}" width="12" height="3" rx="1" fill="var(--gray-metal)"/>
+    <rect x="62" y="92" width="24" height="13" rx="2" fill="#3a3a40"/>
+    <rect x="67" y="88" width="14" height="6" rx="1.5" fill="#2a2a30"/>`;
+
+  const device=isGas?`
+    <rect x="422" y="28" width="30" height="16" rx="3" fill="var(--gray-body)" stroke="${stroke}" stroke-width="1"/>
+    <circle cx="437" cy="30" r="5.5" fill="#191a1d" stroke="rgba(255,255,255,.2)" stroke-width="1"/>
+    <circle cx="437" cy="30" r="2" fill="#3a3a40"/>
+    <rect x="360" y="42" width="150" height="46" rx="4" fill="var(--gray-body)" stroke="${stroke}" stroke-width="1"/>
+    <rect x="360" y="43" width="150" height="2.5" fill="var(--gray-hi)"/>
+    <rect x="352" y="58" width="12" height="8" fill="#3a3a40"/>
+    <rect x="506" y="58" width="12" height="8" fill="#3a3a40"/>
+    ${fitting(350,PIPE_Y)}${fitting(514,PIPE_Y)}
+    <rect x="370" y="51" width="62" height="28" rx="3" fill="var(--inset)" stroke="rgba(255,255,255,.07)"/>
+    <text x="401" y="65" font-size="12" font-weight="600" fill="#e8e8ec" text-anchor="middle" letter-spacing="1">MFC</text>
+    <text x="401" y="74" font-size="6.5" font-weight="500" fill="#7a7a84" text-anchor="middle">HT-FS210</text>
+    <rect x="440" y="51" width="58" height="28" rx="3" fill="var(--inset)" stroke="rgba(255,255,255,.07)"/>
+    <text x="446" y="66" font-size="14" font-weight="500" fill="${lcd}" style="font-variant-numeric:tabular-nums">${s.flow.toFixed(1)}</text>
+    <text x="492" y="74" font-size="6" font-weight="500" fill="#66666f" text-anchor="end">${cfg.unit}</text>
+    <circle cx="500" cy="47" r="2.4" fill="${on?RED:'#7a2530'}"/>`
+  :`
+    <rect x="364" y="24" width="144" height="76" rx="4" fill="var(--gray-body)" stroke="${stroke}" stroke-width="1"/>
+    <rect x="364" y="25" width="144" height="2.5" fill="var(--gray-hi)"/>
+    <rect x="506" y="58" width="12" height="8" fill="#3a3a40"/>
+    ${fitting(344,PIPE_Y)}${fitting(514,PIPE_Y)}
+    <rect x="350" y="53" width="24" height="18" rx="4" fill="var(--gray-metal)" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+    <circle cx="352" cy="62" r="6" fill="#55555c" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+    <circle cx="352" cy="62" r="2.2" fill="#3a3a40"/>
+    <rect x="378" y="34" width="74" height="52" rx="3" fill="var(--inset)" stroke="rgba(255,255,255,.07)"/>
+    <text x="385" y="55" font-size="18" font-weight="500" fill="${lcd}" style="font-variant-numeric:tabular-nums">${s.flow.toFixed(1)}</text>
+    <text x="385" y="66" font-size="6.5" font-weight="500" fill="#66666f">${cfg.unit}</text>
+    <text x="385" y="80" font-size="9" font-weight="500" fill="${on?'#c85a64':'#5a2530'}" style="font-variant-numeric:tabular-nums">Σ ${s.add.toFixed(1)} ${cfg.addUnit}</text>
+    <circle cx="474" cy="44" r="7.5" fill="var(--inset)" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+    <circle cx="474" cy="44" r="2" fill="${on?RED:'#7a2530'}"/>
+    <line x1="474" y1="38.5" x2="474" y2="41" stroke="rgba(255,255,255,.28)" stroke-width="1.2"/>
+    <rect x="464" y="64" width="20" height="7" rx="2" fill="var(--inset)" stroke="rgba(255,255,255,.09)"/>
+    <rect x="488" y="64" width="14" height="7" rx="2" fill="var(--inset)" stroke="rgba(255,255,255,.07)"/>
+    <circle cx="500" cy="33" r="2.6" fill="${on?RED:'#7a2530'}"/>`;
+
+  const press=cfg.hasPressure?`
+    <div class="ro-col">
+      <div class="ro-item">
+        <span class="lab">压力 P</span>
+        <span class="line"><span class="val${s.press>pmax?' warn':''}" style="font-size:20px">${s.press.toFixed(2)}</span><span class="unit">MPa</span></span>
+      </div>
+      <span class="mini-chip ${on?'run':'idle'}">${s.alm||s.press>pmax?'⚠ 超压':(on?'稳压':'待机')}</span>
+    </div>`:'';
+
+  return `
+  <svg class="pid" viewBox="0 0 1100 190" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <marker id="arr-${K}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0 L10 5 L0 10 z" fill="${on?RED:'#7a2530'}"/>
+      </marker>
+    </defs>
+    <text x="20" y="21" font-size="11" font-weight="600" fill="#f6f6f8" letter-spacing="1">${cfg.tagZh}</text>
+    <text x="20" y="34" font-size="8" font-weight="500" fill="#66666f" letter-spacing="1.5">${cfg.tagEn}</text>
+    ${src}
+    <rect x="${srcConnX}" y="${PIPE_Y-4}" width="${VALVE_X-srcConnX}" height="8" rx="1" fill="var(--gray-pipe)" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+    ${on?`<line x1="${srcConnX+2}" y1="${PIPE_Y}" x2="${VALVE_X-2}" y2="${PIPE_Y}" stroke="${RED}" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 16">
+      <animate attributeName="stroke-dashoffset" from="0" to="-180" dur="1.1s" repeatCount="indefinite"/>
+    </line>`:''}
+    ${device}
+    <rect x="388" y="${isGas?98:104}" width="94" height="22" rx="4" fill="var(--panel-2)" stroke="rgba(255,255,255,.1)"/>
+    <text x="435" y="${isGas?113:119}" font-size="12" font-weight="500" fill="#f6f6f8" text-anchor="middle" letter-spacing=".5">${cfg.deviceLabel}</text>
+    <g style="cursor:pointer" data-toggle="${K}">
+      <rect x="196" y="6" width="150" height="50" fill="transparent"/>
+      <text x="210" y="13" font-size="8" font-weight="500" fill="#66666f" letter-spacing="1.2">${isGas?'MFC 通断 · VALVE':'泵启停 · PUMP'}</text>
+      <rect x="210" y="19" width="76" height="32" rx="16" fill="${on?RED:'#35353b'}" ${on?'':'stroke="rgba(255,255,255,.1)" stroke-width="1"'}/>
+      <circle cx="${on?270:226}" cy="35" r="12" fill="${on?'#fff':'#c9c9ce'}" style="transition:all .18s"/>
+      <text x="298" y="40" font-size="13" font-weight="600" fill="${on?RED:'#a4a4b0'}" letter-spacing="1">${on?'ON':'OFF'}</text>
+    </g>
+    <g transform="translate(${VALVE_X},${PIPE_Y})">
+      <path d="M-11 -10 L0 0 L-11 10 Z" fill="none" stroke="${act}" stroke-width="1.6"/>
+      <path d="M11 -10 L0 0 L11 10 Z" fill="none" stroke="${act}" stroke-width="1.6"/>
+      <line x1="0" y1="0" x2="0" y2="-18" stroke="${act}" stroke-width="1.6"/>
+      <circle cx="0" cy="-19" r="3" fill="none" stroke="${act}" stroke-width="1.6"/>
+    </g>
+    <line x1="${VALVE_X+14}" y1="${PIPE_Y}" x2="${VALVE_X+74}" y2="${PIPE_Y}" stroke="${on?RED:'#7a2530'}" stroke-width="3" marker-end="url(#arr-${K})"/>
+    <rect x="${VALVE_X+84}" y="${PIPE_Y-15}" width="64" height="30" rx="4" fill="#26262c" stroke="rgba(255,255,255,.1)"/>
+    <text x="${VALVE_X+116}" y="${PIPE_Y+5}" font-size="13" font-weight="500" fill="#a4a4b0" text-anchor="middle">出口</text>
+    <foreignObject x="534" y="74" width="420" height="112">
+      <div xmlns="http://www.w3.org/1999/xhtml" class="readout">
+        <div class="ro-col">
+          <div class="ro-item">
+            <span class="lab">实时流量 Flow</span>
+            <span class="line"><span class="val">${s.flow.toFixed(1)}</span><span class="unit">${cfg.unit}</span></span>
+          </div>
+          <div class="ro-item dim">
+            <span class="lab">设定 SV</span>
+            <span class="line"><span class="editable" data-edit="${K}:sv" data-dec="1" data-max="1000">${s.fsv.toFixed(1)}</span><span class="unit">${cfg.unit}</span></span>
+          </div>
+        </div>
+        <div class="ro-col">
+          <div class="ro-item dim">
+            <span class="lab">已累积 Add</span>
+            <span class="line"><span class="val" style="font-size:15px;font-weight:500">${s.add.toFixed(1)}</span><span class="unit">${cfg.addUnit}</span></span>
+          </div>
+          <div class="ro-item dim">
+            <span class="lab">${cfg.exLab}</span>
+            <span class="line"><span class="editable" data-edit="${K}:ex" data-dec="1" data-max="${cfg.exMax}">${s.ex.toFixed(1)}</span><span class="unit">${cfg.exUnit}</span></span>
+          </div>
+        </div>
+        ${press}
+      </div>
+    </foreignObject>
+  </svg>`;
+}
+
+/* ---------- 渲染 ---------- */
+const lanesEl=document.getElementById('lanes');
+LANES.forEach(cfg=>{
+  const div=document.createElement('div');div.className='row';div.id='row-'+cfg.key;
+  lanesEl.appendChild(div);
+});
+function render(){
+  LANES.forEach(cfg=>{
+    if(editingLane===cfg.key||pending)return;      /* 编辑/下发中不重绘,避免打断输入 */
+    const s=ST[cfg.key], div=document.getElementById('row-'+cfg.key);
+    const isOn=s.on&&(online||DEMO);
+    div.classList.toggle('on',isOn);
+    div.innerHTML=laneSvg(cfg,{...s,on:isOn});
+  });
+  const lc=document.getElementById('linkChip');
+  lc.className='chip'+((online||DEMO)?' on':'');
+  document.getElementById('linkTxt').textContent=DEMO?'演示模式':(online?'在线':'离线');
+  const ac=document.getElementById('almChip');
+  const hasAlm=almStatus||almComm;
+  ac.style.display=hasAlm?'':'none';
+  ac.className='chip alarm';
+  document.getElementById('almTxt').textContent=almComm?'通信故障':'报警';
+}
+
+/* ---------- 数据接入 ---------- */
+const loginRedirect=()=>{location.href='/login.html?next='+encodeURIComponent(location.pathname+location.search)};
+async function loadMeta(){
+  if(DEMO){document.getElementById('devName').textContent='演示 · 未绑定设备';canControl=true;return}
+  try{
+    const r=await fetch('/web/devices');
+    if(r.status===401)return loginRedirect();
+    const d=(await r.json()).find(x=>x.code===code);
+    if(d){document.getElementById('devName').textContent=(d.name||code)+' · '+code;canControl=!!d.canControl}
+  }catch(e){}
+}
+async function loadTel(){
+  if(DEMO)return;
+  try{
+    const r=await fetch('/web/devices/'+encodeURIComponent(code)+'/telemetry');
+    if(r.status===401)return loginRedirect();
+    if(!r.ok)return;
+    const j=await r.json();
+    online=!!j.online;
+    if(j.online&&j.values){
+      const v=j.values;
+      LANES.forEach(cfg=>{
+        const s=ST[cfg.key],t=cfg.tel;
+        if(typeof v[t.on]==='boolean')s.on=v[t.on];
+        if(typeof v[t.flow]==='number')s.flow=v[t.flow];
+        if(typeof v[t.fsv]==='number')s.fsv=v[t.fsv];
+        if(typeof v[t.add]==='number')s.add=v[t.add];
+        if(t.press&&typeof v[t.press]==='number')s.press=v[t.press];
+        if(t.ph&&typeof v[t.ph]==='number')s.ph=v[t.ph];
+        if(t.ex&&typeof v[t.ex]==='number')s.ex=v[t.ex];
+        if(t.alm)s.alm=!!v[t.alm];
+      });
+      almStatus=!!v.almStatus;
+      almComm=!!(v.almMfcComm||v.almP1Comm||v.almP2Comm);
+    }
+    render();
+  }catch(e){}
+}
+
+/* ---------- 控制下发 ---------- */
+const pendEl=document.getElementById('pend');
+async function control(command,value,label){
+  if(!canControl){alert('无该设备控制权限');return false}
+  if(pending)return false;
+  if(DEMO){return demoControl(command,value)}
+  pending=label||command;
+  pendEl.style.display='flex';
+  document.getElementById('pendTxt').textContent=pending;
+  try{
+    const r=await fetch('/web/devices/'+encodeURIComponent(code)+'/control',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({command,value})
+    });
+    if(r.status===401){loginRedirect();return false}
+    const j=await r.json().catch(()=>({}));
+    console.info('[feedsys] control',command,value,'HTTP',r.status,j);
+    if(!(r.ok&&j.ok))alert((j&&j.error)?j.error+'(HTTP '+r.status+')':'下发失败(HTTP '+r.status+')');
+    await loadTel();
+    return r.ok&&j.ok;
+  }catch(e){
+    console.error('[feedsys] control 网络异常',command,value,e);
+    alert('下发失败:无法连接服务器('+((e&&e.message)||e)+')');
+    return false;
+  }
+  finally{pending=null;pendEl.style.display='none';render()}
+}
+function demoControl(command,value){    /* 演示模式:本地立即生效 */
+  const map={mfcOnOff:['gas','on'],p1OnOff:['liq1','on'],p2OnOff:['liq2','on'],
+    setMfcFsv:['gas','fsv'],setP1Fsv:['liq1','fsv'],setP2Fsv:['liq2','fsv'],
+    setMfcRangeHigh:['gas','ex'],setP1PHigh:['liq1','ex'],setP2PHigh:['liq2','ex']};
+  const m=map[command];
+  if(m){if(m[1]==='on')ST[m[0]].on=value!==0;else ST[m[0]][m[1]]=value}
+  render();return true;
+}
+
+/* ---------- 事件:开关 / 可编辑 ---------- */
+lanesEl.addEventListener('click',e=>{
+  const tg=e.target.closest('[data-toggle]');
+  if(tg){
+    const K=tg.getAttribute('data-toggle');
+    const cfg=LANES.find(c=>c.key===K),s=ST[K];
+    control(cfg.cmd.toggle,s.on?0:1,cfg.cmdName.toggle+(s.on?'(停止)':'(运行)'));
+    return;
+  }
+  const ed=e.target.closest('.editable');
+  if(ed&&!ed.classList.contains('editing'))startEdit(ed);
+});
+function startEdit(span){
+  const [K,field]=span.getAttribute('data-edit').split(':');
+  const dec=+span.getAttribute('data-dec')||1, max=+span.getAttribute('data-max')||9999;
+  const cur=span.textContent;
+  editingLane=K;
+  span.classList.add('editing');
+  span.innerHTML='<input class="editable-input" value="'+cur+'">';
+  const inp=span.querySelector('input');
+  inp.focus();inp.select();
+  let done=false;
+  const commit=async ok=>{
+    if(done)return;done=true;editingLane=null;
+    const n=parseFloat(inp.value);
+    span.classList.remove('editing');span.textContent=cur;
+    if(ok&&!isNaN(n)){
+      const v=Math.max(0,Math.min(max,+n.toFixed(dec)));
+      const cfg=LANES.find(c=>c.key===K);
+      const cmd=field==='sv'?cfg.cmd.sv:cfg.cmd.ex;
+      const name=field==='sv'?cfg.cmdName.sv:cfg.cmdName.ex;
+      if(await control(cmd,v,name+' → '+v)){ST[K][field==='sv'?'fsv':'ex']=v}
+    }
+    render();
+  };
+  inp.addEventListener('blur',()=>commit(true));
+  inp.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter')commit(true);
+    if(ev.key==='Escape')commit(false);
+  });
+}
+document.getElementById('btnReset').onclick=()=>control('alarmReset',1,'报警复位');
+document.getElementById('btnSilence').onclick=()=>control('alarmSilence',1,'报警消音');
+
+/* ---------- 演示模式模拟 ---------- */
+if(DEMO){
+  ST.liq2.on=true;ST.gas.fsv=12.3;ST.liq1.fsv=12.3;ST.liq2.fsv=12.3;
+  ST.liq1.ex=1.5;ST.liq2.ex=1.5;ST.gas.ex=100;
+  setInterval(()=>{
+    LANES.forEach(cfg=>{const s=ST[cfg.key];
+      if(s.on){s.flow=Math.max(0,s.flow+(s.fsv-s.flow)*0.18+(Math.random()-0.5)*0.4);
+        s.add=s.add+s.flow/60;
+        if(cfg.hasPressure)s.press=0.15+(s.flow/(s.fsv||1))*0.85+(Math.random()-0.5)*0.04}
+      else{s.flow*=0.7;if(s.flow<0.05)s.flow=0;if(cfg.hasPressure)s.press*=0.85}});
+    render();
+  },1000);
+}
+
+/* ---------- 启动 ---------- */
+loadMeta().then(loadTel).then(render);
+if(!DEMO)setInterval(loadTel,2000);
+render();
+
+/* 手机横屏适配:视口高不足设计高 644 时整体等比缩放 */
+(function(){ var DH=644, root=document.getElementById('root');
+  function fit(){ var s=Math.min(1,window.innerHeight/DH);
+    if(s<1){ root.style.transformOrigin='0 0'; root.style.transform='scale('+s+')'; root.style.width=(100/s)+'vw'; root.style.height=(window.innerHeight/s)+'px'; }
+    else{ root.style.transform=''; root.style.width=''; root.style.height=''; } }
+  window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120)}); fit();
+})();
+</script>
+</body>
+</html>

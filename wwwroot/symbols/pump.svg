@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 柱塞泵 / 泵:标准离心泵符号 -->
+  <circle cx="50" cy="46" r="30" fill="#ffffff" stroke="#2b3038" stroke-width="3"/>
+  <path d="M50 46 L34 34 L34 58 Z" fill="#A41626"/>
+  <rect x="24" y="74" width="52" height="9" rx="2" fill="#2b3038"/>
+  <path d="M30 76 L30 46 M70 76 L70 46" stroke="#2b3038" stroke-width="3" fill="none"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 管式反应器:盘管 -->
+  <rect x="34" y="10" width="32" height="80" rx="16" fill="#ffffff" stroke="#2b3038" stroke-width="3"/>
+  <path d="M42 22 h16 M42 34 h16 M42 46 h16 M42 58 h16 M42 70 h16 M42 78 h16"
+        fill="none" stroke="#A41626" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 4 v6 M50 90 v6" stroke="#2b3038" stroke-width="3"/>
+</svg>

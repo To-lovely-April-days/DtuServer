@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 电子秤 / 天平 -->
+  <rect x="12" y="62" width="76" height="26" rx="4" fill="#ffffff" stroke="#2b3038" stroke-width="3"/>
+  <rect x="20" y="30" width="60" height="16" rx="3" fill="#eef1f5" stroke="#2b3038" stroke-width="3"/>
+  <rect x="48" y="46" width="4" height="16" fill="#2b3038"/>
+  <rect x="22" y="68" width="34" height="13" rx="2" fill="#111418"/>
+  <text x="39" y="78" font-family="monospace" font-size="9" fill="#7CFC9A" text-anchor="middle">0.00</text>
+  <circle cx="72" cy="74" r="4" fill="#A41626"/>
+</svg>
