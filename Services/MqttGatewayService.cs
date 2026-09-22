@@ -76,6 +76,17 @@ namespace MaxChemical.DtuServer.Services
         private readonly System.Text.RegularExpressions.Regex _reOnline;
         private readonly System.Text.RegularExpressions.Regex _reReply;
 
+        // ── 已注册设备白名单 ──
+        // 我们订的是 device/+/... 通配,同一个 MQTT 实例上任何设备发的消息都会进来。
+        // 不加这道闸:告警会无条件落库(未注册设备可以无限往库里灌行),
+        // 数据消息会在内存里堆状态、还会混进在线设备数。
+        private volatile HashSet<string> _known = new(StringComparer.Ordinal);
+        private DateTime _knownLoadedUtc = DateTime.MinValue;
+        private readonly SemaphoreSlim _knownLock = new(1, 1);
+        private static readonly TimeSpan KnownTtl = TimeSpan.FromSeconds(30);
+        // 未注册设备的日志按设备限流 —— 有的设备 2 秒发一条,不限流能把 journal 刷爆
+        private readonly ConcurrentDictionary<string, DateTime> _unknownLoggedUtc = new(StringComparer.Ordinal);
+
         public MqttGatewayService(MqttOptions opt, ILogger<MqttGatewayService> logger, IServiceScopeFactory scopes)
         {
             _opt = opt;
@@ -296,16 +307,21 @@ namespace MaxChemical.DtuServer.Services
             try
             {
                 var m = _reData.Match(topic);
-                if (m.Success) { HandleData(m.Groups[1].Value, payload); return; }
+                if (m.Success) { var id = m.Groups[1].Value; if (IsKnownDevice(id)) HandleData(id, payload); return; }
 
                 m = _reOnline.Match(topic);
-                if (m.Success) { HandleOnline(m.Groups[1].Value, payload); return; }
+                if (m.Success) { var id = m.Groups[1].Value; if (IsKnownDevice(id)) HandleOnline(id, payload); return; }
 
                 m = _reReply.Match(topic);
-                if (m.Success) { HandleReply(m.Groups[1].Value, payload); return; }
+                if (m.Success) { var id = m.Groups[1].Value; if (IsKnownDevice(id)) HandleReply(id, payload); return; }
 
                 m = _reAlarm.Match(topic);
-                if (m.Success) { await HandleAlarmAsync(m.Groups[1].Value, payload); return; }
+                if (m.Success)
+                {
+                    var id = m.Groups[1].Value;
+                    if (IsKnownDevice(id)) await HandleAlarmAsync(id, payload);
+                    return;
+                }
 
                 // 收到了但对不上任何模板 —— 多半是 Topic 配错了,这种必须看得见,不能埋在 Debug 里
                 _logger.LogWarning("MQTT 收到未识别的 Topic: {Topic}(与 appsettings 里 Mqtt:Topics 的模板都对不上)", raw);
@@ -316,6 +332,72 @@ namespace MaxChemical.DtuServer.Services
                 _logger.LogWarning("MQTT 处理消息失败 {Topic}: {Err}", topic, ex.Message);
             }
         }
+
+        /// <summary>
+        /// 这个 deviceId 是平台上登记过的 MQTT 设备吗?不是就整条丢掉。
+        ///
+        /// 为什么必须有:平台订的是 device/+/... 通配,同一个 MQTT 实例上**任何**设备发的消息
+        /// 都会送进来。告警是要落库的,不设闸门就等于给任何拿到该实例凭据的人
+        /// 开了一条无限往数据库灌行的路 —— 实测见过未注册设备 2 秒一条、一天四万行。
+        /// </summary>
+        private bool IsKnownDevice(string deviceId)
+        {
+            if (_known.Contains(deviceId)) return true;
+
+            // 只在缓存过期时回库查一次。不加这个判断的话,
+            // 一波未注册设备的消息洪水会原样变成一波数据库查询 —— 等于换了个地方被打。
+            if (DateTime.UtcNow - _knownLoadedUtc > KnownTtl) ReloadKnownDevices();
+            if (_known.Contains(deviceId)) return true;
+
+            var now = DateTime.UtcNow;
+            var last = _unknownLoggedUtc.GetValueOrDefault(deviceId, DateTime.MinValue);
+            if (now - last > TimeSpan.FromMinutes(5))
+            {
+                // 这张限流表本身也得有上限:deviceId 是对端随便填的,
+                // 灌一批各不相同的 id 就能让它无限涨 —— 跟上面那个漏洞一个道理。
+                // 撑到上限就整张清掉,代价只是限流重新计时,比吃内存强。
+                if (_unknownLoggedUtc.Count > 1000) _unknownLoggedUtc.Clear();
+                _unknownLoggedUtc[deviceId] = now;
+                _logger.LogWarning(
+                    "MQTT 丢弃未注册设备 {Device} 的消息(同一设备这条提示 5 分钟最多出现一次)。" +
+                    "如果它确实是你的设备,到「网关设备」页面添加一台、标识码填 {Device} 即可开始接收。",
+                    deviceId, deviceId);
+            }
+            return false;
+        }
+
+        /// <summary>从库里重新载入已登记的 MQTT 设备标识码。</summary>
+        private void ReloadKnownDevices()
+        {
+            // 抢不到锁说明已经有人在刷了,直接走 —— 宁可这条消息按旧名单判,也不要一堆线程排队等库
+            if (!_knownLock.Wait(0)) return;
+            try
+            {
+                using var scope = _scopes.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var codes = db.Devices
+                    .Where(d => d.AccessMode == AccessModes.Mqtt)
+                    .Select(d => d.Code)
+                    .ToList();
+                _known = new HashSet<string>(codes, StringComparer.Ordinal);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("刷新已注册设备名单失败,暂时沿用旧名单: {Err}", ex.Message);
+            }
+            finally
+            {
+                // 成功失败都记时间:失败也要等过了 TTL 再重试,否则每条消息都去撞一次库
+                _knownLoadedUtc = DateTime.UtcNow;
+                _knownLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// 新增/删除 MQTT 设备后调用,让白名单立刻生效。
+        /// 不叫它也不会错,只是新设备最多要等 30 秒(TTL)才认得。
+        /// </summary>
+        public void InvalidateKnownDevices() => _knownLoadedUtc = DateTime.MinValue;
 
         private void HandleData(string deviceId, string payload)
         {

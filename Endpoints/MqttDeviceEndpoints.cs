@@ -62,7 +62,7 @@ namespace MaxChemical.DtuServer.Endpoints
             });
 
             // 添加 MQTT 设备:自动生成设备标识码(= MQTT deviceId,也是二维码内容)
-            g.MapPost("/mqtt-devices", async (HttpContext ctx, AppDbContext db) =>
+            g.MapPost("/mqtt-devices", async (HttpContext ctx, AppDbContext db, MqttGatewayService mqtt) =>
             {
                 var form = await ctx.Request.ReadFormAsync();
                 var name = form["name"].ToString().Trim();
@@ -97,6 +97,8 @@ namespace MaxChemical.DtuServer.Endpoints
 
                 db.Devices.Add(dev);
                 await db.SaveChangesAsync();
+                // 让 MQTT 侧的已注册设备白名单立刻认得它,否则新设备最长要等 30 秒才收得到消息
+                mqtt.InvalidateKnownDevices();
                 return Results.Ok(new { dev.Id, dev.Code, dev.Name, dev.ProductKey });
             });
 

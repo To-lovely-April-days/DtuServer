@@ -109,7 +109,7 @@ namespace MaxChemical.DtuServer.Endpoints
                 return Results.Ok(new { dev.Id, dev.Code, dev.Name, dev.DeviceType, dev.ModbusStation });
             });
 
-            g.MapDelete("/devices/{id}", async (string id, AppDbContext db) =>
+            g.MapDelete("/devices/{id}", async (string id, AppDbContext db, MqttGatewayService mqtt) =>
             {
                 var dev = await db.Devices.FindAsync(id);
                 if (dev == null) return Results.NotFound();
@@ -120,6 +120,8 @@ namespace MaxChemical.DtuServer.Endpoints
                 // 以及它的告警记录(MQTT 设备才会有)
                 db.DeviceAlarms.RemoveRange(db.DeviceAlarms.Where(a => a.DeviceCode == dev.Code));
                 await db.SaveChangesAsync();
+                // 删完立刻让 MQTT 白名单失效,不然它还能往库里写最多 30 秒
+                mqtt.InvalidateKnownDevices();
                 return Results.Ok();
             });
 
