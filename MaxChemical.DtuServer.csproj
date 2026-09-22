@@ -13,6 +13,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Web SDK 默认把 **/*.json 都当 Content 发布出去,appsettings.Production.json 会被一起带走。
+         这个文件是「机器专属」的:证书路径、SQLite 路径、MQTT ClientSuffix 每台都不一样,
+         跟着产物跑到另一台机器上全是错的 —— 尤其 ClientSuffix 撞了,
+         两台服务器会在阿里云上互相把对方踢下线,现象是反复「连上又断」。
+         所以只禁止进发布产物,不禁止进 bin(本机 dotnet run 照常读得到)。
+         每台机器的这个文件都在部署时手工放置。 -->
+    <Content Update="appsettings.Production.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 系统服务托管:两个包各管一个平台,在对方平台上是空操作,同一份产物两边都能跑 -->
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.1" />
