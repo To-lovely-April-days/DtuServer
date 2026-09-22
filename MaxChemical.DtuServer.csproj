@@ -8,11 +8,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="Properties\PublishProfiles\launchSettings.json" />
+    <!-- 正斜杠在 Windows 和 Linux 的 MSBuild 下都认;反斜杠只有 Windows 认 -->
+    <Content Include="Properties/PublishProfiles/launchSettings.json" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 系统服务托管:两个包各管一个平台,在对方平台上是空操作,同一份产物两边都能跑 -->
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.7.3" />

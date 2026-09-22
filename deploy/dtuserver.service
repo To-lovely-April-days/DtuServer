@@ -1,0 +1,53 @@
+[Unit]
+Description=MaxChemical DtuServer (DTU 透传 + MQTT 网关 + 物模型平台)
+Documentation=https://github.com/To-lovely-April-days/DtuServer
+# network-online 而不是 network：程序启动就要监听端口、并主动外连阿里云 MQTT，
+# 网卡拿到地址前起来会连不上
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# notify 需要程序里的 builder.Host.UseSystemd()（已加）。
+# 若服务启动卡住直到超时，说明那句没生效 —— 改成 Type=simple 即可。
+Type=notify
+User=dtuserver
+Group=dtuserver
+
+# 程序目录。SQLite 连接串若写相对路径会相对于这里，
+# 但推荐在 appsettings.Production.json 里写成 /var/lib/dtuserver 下的绝对路径。
+WorkingDirectory=/opt/dtuserver
+ExecStart=/opt/dtuserver/MaxChemical.DtuServer
+
+Restart=always
+RestartSec=5
+# DTU 是长连接，停机时给足时间让连接干净断开，否则设备侧会看到异常断线
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+# 日志直接进 journald（UseSystemd 会把级别映射成 journald 优先级，journalctl -p err 才好使）
+SyslogIdentifier=dtuserver
+
+# 每台 DTU 一条 TCP + MQTT + SignalR + HTTP，默认 1024 很快就不够
+LimitNOFILE=65535
+
+# ── 安全加固 ──
+# ProtectSystem=strict 让整个文件系统只读，只有 ReadWritePaths 列出的能写。
+# 这也是程序里给 ACME 目录加 try/catch 的原因：/opt/dtuserver/wwwroot 在这里是只读的。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/dtuserver
+
+# ── 不用 nginx、让程序自己绑 80/443 时，取消下面两行的注释 ──
+# Linux 上 <1024 是特权端口，这样授权比直接用 root 跑安全得多
+#AmbientCapabilities=CAP_NET_BIND_SERVICE
+#CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

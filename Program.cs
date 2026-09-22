@@ -6,6 +6,7 @@ using MaxChemical.DtuServer.Hubs;
 using MaxChemical.DtuServer.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -14,8 +15,11 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 以 Windows 服务方式运行(开机自启);控制台运行时无副作用
+// 以系统服务方式运行(开机自启)。两句各认各的平台、在对方平台上是空操作,
+// 所以同一份代码在 Windows 服务和 Linux systemd 下都能正确托管:
+//   Windows → 走 SCM;Linux → 走 systemd(Type=notify 的就绪通知 + journald 日志分级)
 builder.Host.UseWindowsService();
+builder.Host.UseSystemd();
 
 // ── 数据层(SQLite 单文件持久化:用户/设备/授权)──
 var conn = builder.Configuration.GetConnectionString("Default") ?? "Data Source=maxchemic.db";
@@ -130,6 +134,15 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// 反向代理转发头(Linux 上 nginx 终止 TLS 时必需,必须排在所有其他中间件前面)。
+// 不加的话程序看到的永远是 http://127.0.0.1:5000:登录跳转会掉到 http、
+// Secure Cookie 不生效、二维码链接也会退化。默认只信任回环地址来的转发头,
+// 也就是只认本机 nginx —— 直连部署时没有这些头,这段等于不存在。
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+});
+
 // 建库 + 首启种子管理员
 DbSeeder.EnsureCreatedAndSeed(app.Services, app.Configuration, app.Logger);
 
@@ -146,17 +159,30 @@ contentTypes.Mappings[".gltf"] = "model/gltf+json";
 contentTypes.Mappings[".jsonc"] = "application/json";
 app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = contentTypes });
 
-// Let's Encrypt (win-acme) HTTP-01 验证:放行 /.well-known/acme-challenge/ 下的明文、无扩展名文件,
-// 让 80 端口的本程序直接返回验证令牌,从而支持自动签发/续期(win-acme 用 webroot=wwwroot)。
+// Let's Encrypt HTTP-01 验证:放行 /.well-known/acme-challenge/ 下的明文、无扩展名文件,
+// 让 80 端口的本程序直接返回验证令牌(Windows 上 win-acme、Linux 上 certbot --webroot 都用这个目录)。
+//
+// 建目录失败不能让整个服务起不来:Linux 的标准部署是程序目录 root 所有、服务账号只读,
+// 这时 CreateDirectory 会抛 UnauthorizedAccessException —— 而 ACME 只是可选功能,
+// 用 DNS-01 签发或让 nginx 终止 TLS 时根本不需要它。
 var acmeDir = Path.Combine(app.Environment.ContentRootPath, "wwwroot", ".well-known", "acme-challenge");
-Directory.CreateDirectory(acmeDir);
-app.UseStaticFiles(new StaticFileOptions
+try
 {
-    FileProvider = new PhysicalFileProvider(acmeDir),
-    RequestPath = "/.well-known/acme-challenge",
-    ServeUnknownFileTypes = true,          // 挑战文件无扩展名
-    DefaultContentType = "text/plain",
-});
+    Directory.CreateDirectory(acmeDir);
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(acmeDir),
+        RequestPath = "/.well-known/acme-challenge",
+        ServeUnknownFileTypes = true,          // 挑战文件无扩展名
+        DefaultContentType = "text/plain",
+    });
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex,
+        "ACME 验证目录 {Dir} 不可用,HTTP-01 自动签发/续期将无法工作。" +
+        "如果证书走 DNS-01 或由反向代理(nginx)管理,可以忽略这条。", acmeDir);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
