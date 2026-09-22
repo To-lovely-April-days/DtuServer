@@ -135,12 +135,44 @@ else
   echo "未安装。装法见 deploy/README.md"
 fi
 
+hr "包管理器"
+PKG=""
+for m in apt dnf yum zypper apk; do have "$m" && { PKG="$m"; break; }; done
+echo "  $( [ -n "$PKG" ] && echo "$PKG" || echo '没识别出来（非主流发行版？）')"
+case "$PKG" in
+  apt)  echo "  装依赖: sudo apt install -y libicu-dev iproute2" ;;
+  dnf)  echo "  装依赖: sudo dnf install -y libicu iproute" ;;
+  yum)  echo "  装依赖: sudo yum install -y libicu iproute" ;;
+esac
+
+hr "glibc 版本（决定 .NET 8 能不能跑）"
+GLIBC=$(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+$')
+if [ -n "$GLIBC" ]; then
+  echo "  glibc $GLIBC"
+  # .NET 8 要求 glibc >= 2.23。CentOS 7 / Alibaba Cloud Linux 2 是 2.17，跑不了。
+  if [ "$(printf '%s\n2.23\n' "$GLIBC" | sort -V | head -1)" = "$GLIBC" ] && [ "$GLIBC" != "2.23" ]; then
+    echo "  ！！glibc 太老，.NET 8 要求 2.23 以上 —— 这台机器跑不了 .NET 8。"
+    echo "     常见于 CentOS 7 / Alibaba Cloud Linux 2（都是 glibc 2.17）。"
+    echo "     出路：换 Alibaba Cloud Linux 3 / Anolis 8 / Ubuntu 的镜像，"
+    echo "          或者改用 Docker 跑（容器里自带新 glibc，宿主机无所谓）。"
+  else
+    echo "  ✓ 满足 .NET 8 的要求（>= 2.23）"
+  fi
+else
+  echo "  取不到，手工跑一下: ldd --version"
+fi
+
 hr "ICU（中文/全球化，硬依赖）"
 if ldconfig -p 2>/dev/null | grep -q libicuuc; then
   ldconfig -p | grep libicuuc | head -2 | sed 's/^/  /'
 else
   echo "  ！没有 libicu —— 程序会崩在 Couldn't find a valid ICU package"
-  echo "   Debian/Ubuntu: apt install -y libicu-dev     RHEL 系: dnf install -y libicu"
+  case "$PKG" in
+    apt) echo "   装: sudo apt install -y libicu-dev" ;;
+    dnf) echo "   装: sudo dnf install -y libicu" ;;
+    yum) echo "   装: sudo yum install -y libicu" ;;
+    *)   echo "   Debian/Ubuntu: apt install -y libicu-dev   RHEL 系: dnf install -y libicu" ;;
+  esac
 fi
 
 hr "会撞车的既有痕迹"
