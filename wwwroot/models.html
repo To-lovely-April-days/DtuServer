@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>物模型 · MaxChemical</title>
+  <link rel="stylesheet" href="/shell.css" />
+  <style>
+    /* 只放物模型页专属的，通用组件都在 shell.css */
+    .mcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:20px}
+    .mcard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;cursor:pointer;
+      transition:transform .16s,box-shadow .16s,border-color .16s}
+    .mcard:hover{transform:translateY(-2px);border-color:#d7dae0;box-shadow:0 14px 32px -18px rgba(20,22,28,.4)}
+    .mcard .top{display:flex;align-items:flex-start;gap:12px}
+    .mcard .nm{font-size:15.5px;font-weight:600;flex:1;line-height:1.35}
+    .mcard .pk{font-size:11.5px;color:var(--text-3);margin-top:3px}
+    .mcard .stat{display:flex;gap:16px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line-2)}
+    .mcard .stat div{font-size:11.5px;color:var(--text-3)}
+    .mcard .stat b{display:block;font-size:16px;font-weight:600;color:var(--ink);line-height:1.3}
+
+    .savebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:30;
+      background:rgba(255,255,255,.94);backdrop-filter:blur(12px);padding:12px 0;border-bottom:1px solid var(--line);
+      margin:-26px 0 0}
+    .savebar .sp{flex:1}
+    .savebar .nm{font-size:15px;font-weight:700}
+    .savebar .sub{font-size:11.5px;color:var(--text-3)}
+    .dot-dirty{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+
+    .issues{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);
+      margin-top:30px;padding:12px 0 18px;z-index:20}
+    .issbox{max-height:180px;overflow:auto}
+    .iss{display:flex;gap:9px;align-items:flex-start;font-size:13px;padding:5px 0;line-height:1.5}
+    .iss .lv{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;flex:none;margin-top:2px}
+    .iss.fatal .lv{color:#fff;background:var(--danger)}
+    .iss.error .lv{color:var(--danger);background:var(--danger-bg)}
+    .iss.warn .lv{color:var(--warn);background:var(--warn-bg)}
+    .iss .pt{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;
+      color:var(--text-3);flex:none;margin-top:1px}
+  </style>
+</head>
+<body>
+  <div id="shell-mount"></div>
+  <template id="page-content">
+
+  <!-- ============ 列表视图 ============ -->
+  <div id="listView">
+    <div class="content-head">
+      <div>
+        <div class="kicker mono">THING MODEL</div>
+        <h1 class="title">物模型</h1>
+        <div class="subtitle">定义设备的数据字段、控制指令、告警和 Modbus 映射，平台自动生成接入网关与手机 APP 共用的配置文件</div>
+      </div>
+      <div class="head-actions"><span class="chip" id="mqttPill">MQTT 状态检查中…</span></div>
+    </div>
+    <div class="toolbar">
+      <div class="tool-actions">
+      <button class="btn-new" id="btnNew">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>新建物模型</button>
+      <button class="ghost-btn" id="btnImport">导入配置文件</button>
+      <a class="ghost-btn" href="/templates/HT2000_Full_Config_v2.1.jsonc" download>下载示例文件</a>
+      </div>
+    </div>
+    <div class="mcards" id="mcards"></div>
+    <div style="height:60px"></div>
+  </div>
+
+  <!-- ============ 编辑视图 ============ -->
+  <div id="editView" style="display:none">
+    <div class="savebar">
+      <button class="ghost-btn btn-xs" id="btnBack">← 返回列表</button>
+      <div>
+        <div class="nm" id="edTitle">—</div>
+        <div class="sub mono" id="edSub">—</div>
+      </div>
+      <div class="sp"></div>
+      <span id="dirtyTag" style="display:none;align-items:center;gap:7px;font-size:12.5px;color:var(--warn)">
+        <span class="dot-dirty"></span>有未保存的改动</span>
+      <button class="ghost-btn btn-xs danger" id="btnDelete">删除</button>
+      <button class="ghost-btn btn-xs" id="btnExport">导出 .jsonc</button>
+      <button class="ghost-btn btn-xs" id="btnPublish">发布</button>
+      <button class="btn-new btn-xs" id="btnSave">保存</button>
+    </div>
+
+    <div class="row-tabs"><div class="tabs" id="tabs">
+      <div class="tab active" data-p="meta">基本信息</div>
+      <div class="tab" data-p="mqtt">MQTT 通信</div>
+      <div class="tab" data-p="fields">数据字段</div>
+      <div class="tab" data-p="cmds">控制指令</div>
+      <div class="tab" data-p="alarms">告警事件</div>
+      <div class="tab" data-p="modbus">Modbus 映射</div>
+      <div class="tab" data-p="ui">APP 界面</div>
+      <div class="tab" data-p="preview">预览 / 原始 JSON</div>
+    </div></div>
+
+    <!-- 基本信息 -->
+    <div class="pane active" data-p="meta">
+      <div class="sec">
+        <div class="sec-head"><h3>型号信息</h3><span class="hint">对应文件里的 meta 段，APP 拿它显示设备名片</span></div>
+        <div class="field-row" id="metaGrid"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>缓存与二维码</h3><span class="hint">APP 多久重新拉一次配置、扫码绑定的链接格式</span></div>
+        <div class="field-row" id="metaGrid2"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>网关本地策略</h3><span class="hint">断网缓存与重连退避，网关端读</span></div>
+        <div class="field-row" id="gwGrid"></div>
+      </div>
+    </div>
+
+    <!-- MQTT -->
+    <div class="pane" data-p="mqtt">
+      <div class="sec">
+        <div class="sec-head"><h3>接入点</h3><span class="hint">网关和 APP 用这些参数连 Broker</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" id="btnPlatformFill">用平台配置填充</button></div>
+        <div class="field-row" id="mqttGrid"></div>
+        <div class="hint" style="font-size:12.5px;color:var(--text-3);margin-top:12px">
+          接入点、实例 ID 和下面的 Topic 都由平台自己的 <span class="mono">appsettings → Mqtt</span> 决定，新建物模型时已自动填好。
+          AccessKey / SecretKey 保持「从服务端动态获取」—— 按规范它们由设备启动时向服务端换取，写死在配置文件里会随文件一起发到每台设备上。
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Topic 模板</h3><span class="hint">{deviceId} 会替换成设备标识码，{productKey} 替换成产品标识</span></div>
+        <div class="field-row" id="topicGrid"></div>
+        <div class="hint" style="font-size:12.5px;color:var(--text-3);margin-top:12px" id="topicWarn"></div>
+      </div>
+    </div>
+
+    <!-- 数据字段 -->
+    <div class="pane" data-p="fields">
+      <div class="sec">
+        <div class="sec-head">
+          <h3>数据字段</h3>
+          <span class="hint">identifier 是贯穿全文的关联 key，网关采集、APP 渲染都靠它对齐</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" data-add="fields">+ 添加字段</button>
+        </div>
+        <div id="fieldsBox"></div>
+      </div>
+    </div>
+
+    <!-- 控制指令 -->
+    <div class="pane" data-p="cmds">
+      <div class="sec">
+        <div class="sec-head">
+          <h3>控制指令</h3>
+          <span class="hint">APP 发指令 → 网关按 Modbus 写映射执行 → 回执</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" data-add="cmds">+ 添加指令</button>
+        </div>
+        <div id="cmdsBox"></div>
+      </div>
+    </div>
+
+    <!-- 告警事件 -->
+    <div class="pane" data-p="alarms">
+      <div class="sec">
+        <div class="sec-head">
+          <h3>告警事件</h3>
+          <span class="hint">网关按触发条件判断并上报，平台落库、APP 弹通知</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" data-add="alarms">+ 添加告警</button>
+        </div>
+        <div id="alarmsBox"></div>
+      </div>
+    </div>
+
+    <!-- Modbus -->
+    <div class="pane" data-p="modbus">
+      <div class="sec">
+        <div class="sec-head"><h3>串口 / TCP 端口</h3><div class="sp"></div>
+          <button class="ghost-btn btn-xs" data-add="port">+ 添加端口</button></div>
+        <div id="portsBox"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>采集与上报</h3><span class="hint">轮询周期、上报方式、离线判定</span></div>
+        <div class="field-row" id="pollGrid"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>采集映射 registerMap</h3>
+          <span class="hint">寄存器 → 数据字段。scale 是缩放系数，如仪表存 785 表示 78.5℃ 就填 0.1</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" id="btnAutoReg">按字段补齐</button>
+          <button class="ghost-btn btn-xs" data-add="reg">+ 添加</button></div>
+        <div id="regBox"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>写映射 writeMap</h3>
+          <span class="hint">一条指令 → 要写的一个或多个寄存器，按顺序执行</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" id="btnAutoWrite">按指令补齐</button></div>
+        <div id="writeBox"></div>
+      </div>
+    </div>
+
+    <!-- APP 界面 -->
+    <div class="pane" data-p="ui">
+      <div class="sec">
+        <div class="sec-head"><h3>数据展示分组</h3>
+          <span class="hint">APP 端参考方案，控件类型和布局可以让 APP 团队再调</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" id="btnAutoUi">按数据契约自动生成</button>
+          <button class="ghost-btn btn-xs" data-add="dgroup">+ 添加分组</button></div>
+        <div id="displayBox"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>历史曲线</h3></div>
+        <div class="field-row" id="chartGrid"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>控制按钮分组</h3><div class="sp"></div>
+          <button class="ghost-btn btn-xs" data-add="cgroup">+ 添加分组</button></div>
+        <div id="cmdUiBox"></div>
+      </div>
+    </div>
+
+    <!-- 预览 -->
+    <div class="pane" data-p="preview">
+      <div class="sec">
+        <div class="sec-head"><h3>生成的配置文件</h3>
+          <span class="hint">保存后生成。Part E 的报文示例由数据契约自动推导</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" id="btnCopy">复制</button>
+          <button class="ghost-btn btn-xs" id="btnRefresh">刷新预览</button></div>
+        <pre class="code" id="previewBox">保存后点「刷新预览」</pre>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>原始 JSON</h3>
+          <span class="hint">界面上没覆盖到的字段可以直接在这里改，改完点「应用」</span>
+          <div class="sp"></div>
+          <button class="ghost-btn btn-xs" id="btnApplyRaw">应用到编辑器</button></div>
+        <textarea class="inp" id="rawBox" style="height:46vh"></textarea>
+        <div class="err" id="rawErr" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="issues">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--text-2);font-weight:500">校验</span>
+        <span id="issSummary" style="font-size:12.5px;color:var(--text-3)">—</span>
+      </div>
+      <div class="issbox" id="issBox"></div>
+    </div>
+  </div>
+
+  <!-- 新建 -->
+  <div class="mask" id="newMask">
+    <div class="modal">
+      <div class="modal-head"><h3>新建物模型</h3><span class="x" onclick="hide('newMask')">×</span></div>
+      <div class="modal-body">
+        <div class="field"><label>产品标识 productKey *</label>
+          <input class="mono" id="nKey" placeholder="如 HT2000，字母数字下划线短横线" /></div>
+        <div class="field"><label>型号名称</label>
+          <input id="nName" placeholder="如 HT-2000 双釜搅拌反应器" /></div>
+        <div class="field"><label>版本</label><input id="nVer" value="1.0.0" /></div>
+        <div class="field"><label>厂商</label><input id="nMfr" placeholder="选填" /></div>
+        <div class="err" id="newErr"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="hide('newMask')">取消</button>
+        <button class="btn-save" id="newGo">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入 -->
+  <div class="mask" id="impMask">
+    <div class="modal">
+      <div class="modal-head"><h3>导入配置文件</h3><span class="x" onclick="hide('impMask')">×</span></div>
+      <div class="modal-body">
+        <p class="hint" style="margin-bottom:16px">
+          选一个 .jsonc / .json 配置文件。productKey 从文件的 meta 里读，也可以在下面覆盖。</p>
+        <div class="field"><label>配置文件</label>
+          <input type="file" id="impFile" accept=".jsonc,.json,application/json,text/plain" style="padding:9px 12px;height:auto" /></div>
+        <div class="field"><label>productKey（留空则用文件里的）</label>
+          <input class="mono" id="impKey" placeholder="选填" /></div>
+        <label class="gchk" style="margin-bottom:4px">
+          <input type="checkbox" id="impOw" /> 已存在同名 productKey 时覆盖</label>
+        <div class="err" id="impErr"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="hide('impMask')">取消</button>
+        <button class="btn-save" id="impGo">导入</button>
+      </div>
+    </div>
+  </div>
+
+</template>
+
+<script src="/shell.js"></script>
+<script>
+Shell.mount('models');
+
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function hide(id){$(id).style.display='none';} function show(id){$(id).style.display='flex';}
+async function guard(r){if(r.status===401){location.href='/login.html?next=/models.html';throw 0;}
+  if(r.status===403){alert('需要管理员权限');throw 0;}return r;}
+async function errText(r){try{const d=await r.json();return d.error||JSON.stringify(d);}catch{return '请求失败 ('+r.status+')';}}
+
+const ICON_DEL=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_UP=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_DN=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M19 12l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+let MODELS=[], CUR=null, CFG=null, DIRTY=false;
+
+// ---------- 通用小工具 ----------
+const optsToText=o=>o&&typeof o==='object'?Object.entries(o).map(([k,v])=>`${k}=${v}`).join(', '):'';
+function textToOpts(t){const o={};(t||'').split(/[,，]/).forEach(p=>{const i=p.indexOf('=');
+  if(i>0){const k=p.slice(0,i).trim();if(k)o[k]=p.slice(i+1).trim();}});return Object.keys(o).length?o:undefined;}
+const arrToText=a=>Array.isArray(a)?a.join(', '):'';
+function textToArr(t){const a=(t||'').split(/[,，]/).map(s=>s.trim()).filter(Boolean);return a.length?a:[];}
+
+function setVal(obj,key,raw,type){
+  if(type==='num'){ if(raw===''||raw==null){delete obj[key];} else {const n=Number(raw); if(!isNaN(n))obj[key]=n;} }
+  else if(type==='bool'){ obj[key]=!!raw; }
+  else if(type==='opts'){ const o=textToOpts(raw); if(o)obj[key]=o; else delete obj[key]; }
+  else if(type==='arr'){ obj[key]=textToArr(raw); }
+  else { if(raw==='')delete obj[key]; else obj[key]=raw; }
+  markDirty();
+}
+function markDirty(){DIRTY=true;$('dirtyTag').style.display='flex';}
+function clearDirty(){DIRTY=false;$('dirtyTag').style.display='none';}
+
+/** 深取:path 形如 'modbus.registerMap',不存在就按 def 建出来 */
+function dig(path,def){
+  let o=CFG;const ps=path.split('.');
+  for(let i=0;i<ps.length;i++){
+    const last=i===ps.length-1;
+    if(o[ps[i]]==null||typeof o[ps[i]]!=='object') o[ps[i]]=last?(def!==undefined?def:{}):{};
+    o=o[ps[i]];
+  }
+  return o;
+}
+
+/** 表单字段:直接绑到 CFG 的某个对象上 */
+function fld(obj,key,label,type,opts){
+  const v=obj[key];
+  const val=type==='opts'?optsToText(v):(type==='arr'?arrToText(v):(v==null?'':v));
+  if(type==='bool')
+    return `<div class="field"><label>${esc(label)}</label>
+      <label style="display:flex;gap:8px;align-items:center;height:42px;font-size:14px">
+      <input type="checkbox" data-f data-k="${key}" data-t="bool" ${v?'checked':''}/> ${v?'是':'否'}</label></div>`;
+  if(type==='select')
+    return `<div class="field"><label>${esc(label)}</label><select class="inp" data-f data-k="${key}">
+      ${(opts||[]).map(o=>`<option value="${esc(o)}" ${String(v)===String(o)?'selected':''}>${esc(o)}</option>`).join('')}
+      </select></div>`;
+  return `<div class="field"><label>${esc(label)}</label>
+    <input class="inp${type==='num'?'':' '}" data-f data-k="${key}" data-t="${type||''}"
+      value="${esc(val)}" placeholder="${esc((opts&&opts.ph)||'')}" ${type==='num'?'type="number" step="any"':''}/></div>`;
+}
+/** 把一个 grid 容器绑定到某个配置对象上 */
+function bindForm(elId,obj,html){
+  const el=$(elId); el.innerHTML=html;
+  el.oninput=el.onchange=e=>{
+    const t=e.target; if(!t.dataset.hasOwnProperty('f'))return;
+    setVal(obj,t.dataset.k,t.type==='checkbox'?t.checked:t.value,t.dataset.t);
+    if(t.type==='checkbox') t.parentElement.lastChild.textContent=' '+(t.checked?'是':'否');
+  };
+}
+
+/** 紧凑表格编辑器。cols=[{k,label,t,w,ph,opts}] */
+function tbl(arr,cols,tag,extraRow){
+  if(!arr.length) return `<div class="blank">还没有内容，点右上角添加</div>`;
+  return `<table class="tbl"><thead><tr>
+    ${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.label)}</th>`).join('')}<th class="act"></th></tr></thead>
+    <tbody>${arr.map((r,i)=>`<tr>${cols.map(c=>`<td>${cellHtml(r,c,i)}</td>`).join('')}
+      <td class="act">
+        <button class="ib" data-mv="-1" data-i="${i}" data-tag="${tag}" title="上移">${ICON_UP}</button>
+        <button class="ib" data-mv="1" data-i="${i}" data-tag="${tag}" title="下移">${ICON_DN}</button>
+        <button class="ib del" data-rm="${i}" data-tag="${tag}" title="删除">${ICON_DEL}</button>
+      </td></tr>${extraRow?extraRow(r,i,cols.length+1):''}`).join('')}</tbody></table>`;
+}
+function cellHtml(r,c,i){
+  const v=r[c.k];
+  // num:1 的下拉要按数字存回去 —— 功能码这类字段存成字符串 "3" 后端会判成没填
+  if(c.t==='select')
+    return `<select data-i="${i}" data-k="${c.k}" data-t="${c.num?'num':''}">${(c.opts||[]).map(o=>{
+      const val=typeof o==='object'?o.v:o, lab=typeof o==='object'?o.l:o;
+      return `<option value="${esc(val)}" ${String(v)===String(val)?'selected':''}>${esc(lab)}</option>`;}).join('')}</select>`;
+  if(c.t==='bool')
+    return `<input type="checkbox" data-i="${i}" data-k="${c.k}" data-t="bool" ${v?'checked':''} style="width:auto;height:auto"/>`;
+  const val=c.t==='opts'?optsToText(v):(c.t==='arr'?arrToText(v):(v==null?'':v));
+  return `<input class="${c.mono?'mono':''}" data-i="${i}" data-k="${c.k}" data-t="${c.t||''}"
+    value="${esc(val)}" placeholder="${esc(c.ph||'')}" ${c.t==='num'?'type="number" step="any"':''}/>`;
+}
+/** 把表格容器绑到数组上。getArr 每次现取,保证增删后仍指向最新数组 */
+function bindTbl(elId,getArr,rerender){
+  const el=$(elId);
+  el.oninput=el.onchange=e=>{
+    const t=e.target; if(t.dataset.i===undefined||!t.dataset.k)return;
+    const arr=getArr(); const row=arr[+t.dataset.i]; if(!row)return;
+    setVal(row,t.dataset.k,t.type==='checkbox'?t.checked:t.value,t.dataset.t);
+  };
+  el.onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    const arr=getArr();
+    if(b.dataset.rm!==undefined){ arr.splice(+b.dataset.rm,1); markDirty(); rerender(); }
+    else if(b.dataset.mv!==undefined){
+      const i=+b.dataset.i, j=i+(+b.dataset.mv);
+      if(j<0||j>=arr.length)return;
+      [arr[i],arr[j]]=[arr[j],arr[i]]; markDirty(); rerender();
+    }
+  };
+}
+
+// ==========================================================
+//  列表视图
+// ==========================================================
+async function loadList(){
+  const r=await guard(await fetch('/admin/models'));
+  MODELS=await r.json();
+  const box=$('mcards');
+  if(!MODELS.length){ box.innerHTML=`<div class="blank" style="grid-column:1/-1;padding:48px">
+    还没有物模型。点「新建物模型」从零开始，或者「导入配置文件」把手上现成的配置传进来。</div>`; return; }
+  box.innerHTML=MODELS.map(m=>{
+    const tag=m.status==='published'
+      ? (m.hasUnpublished?`<span class="chip warn">有未发布改动</span>`:`<span class="chip ok">已发布</span>`)
+      : `<span class="chip">草稿</span>`;
+    const s=m.stats||{};
+    return `<div class="mcard" data-key="${esc(m.productKey)}">
+      <div class="top"><div style="flex:1">
+        <div class="nm">${esc(m.modelName||m.productKey)}</div>
+        <div class="pk">${esc(m.productKey)} · v${esc(m.modelVersion)} · rev${m.revision}</div>
+      </div>${tag}</div>
+      <div class="stat">
+        <div><b>${s.fields||0}</b>字段</div><div><b>${s.commands||0}</b>指令</div>
+        <div><b>${s.alarms||0}</b>告警</div><div><b>${s.registers||0}</b>采集点</div>
+        <div><b>${m.deviceCount||0}</b>台设备</div>
+      </div></div>`;}).join('');
+}
+$('mcards').addEventListener('click',e=>{
+  const c=e.target.closest('.mcard'); if(c) openModel(c.dataset.key);
+});
+
+async function loadMqttPill(){
+  try{
+    const r=await fetch('/admin/mqtt-status'); if(!r.ok)return;
+    const d=await r.json();
+    const p=$('mqttPill');
+    p.className='chip '+(d.enabled?(d.connected?'ok':'bad'):'');
+    p.textContent=d.enabled
+      ? `MQTT ${d.connected?'已连接':'未连接'} · ${d.devices.length} 台设备有上报`
+      : 'MQTT 未启用（appsettings 里 Mqtt:Enabled）';
+  }catch{}
+}
+
+// ==========================================================
+//  编辑视图
+// ==========================================================
+async function openModel(key){
+  const r=await guard(await fetch('/admin/models/'+encodeURIComponent(key)));
+  if(!r.ok){alert(await errText(r));return;}
+  CUR=await r.json(); CFG=CUR.config||{};
+  $('listView').style.display='none'; $('editView').style.display='block';
+  $('edTitle').textContent=CUR.modelName||CUR.productKey;
+  $('edSub').textContent=`${CUR.productKey} · v${CUR.modelVersion} · rev${CUR.revision} · ${CUR.status==='published'?'已发布':'草稿'}`;
+  clearDirty(); renderAll(); showIssues(CUR.issues||[]);
+  window.scrollTo(0,0);
+}
+$('btnBack').onclick=async()=>{
+  if(DIRTY&&!confirm('有未保存的改动，确定离开？'))return;
+  $('editView').style.display='none'; $('listView').style.display='block';
+  await loadList();
+};
+$('tabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab'); if(!t)return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('active',p.dataset.p===t.dataset.p));
+  if(t.dataset.p==='preview') $('rawBox').value=JSON.stringify(CFG,null,2);
+});
+
+function renderAll(){ renderMeta(); renderMqtt(); renderFields(); renderCmds(); renderAlarms(); renderModbus(); renderUi(); }
+
+// ---------- 基本信息 ----------
+function renderMeta(){
+  const m=dig('meta');
+  bindForm('metaGrid',m,
+    fld(m,'productKey','产品标识 productKey','text',{ph:'不可改'})+
+    fld(m,'modelName','型号名称','text')+
+    fld(m,'modelVersion','版本号','text',{ph:'如 2.1.0'})+
+    fld(m,'manufacturer','厂商','text')+
+    fld(m,'icon','图标标识','text',{ph:'如 reactor_double'})+
+    fld(m,'photo','设备图片 URL','text')+
+    fld(m,'description','描述','text'));
+  $('metaGrid').querySelector('[data-k="productKey"]').readOnly=true;
+
+  const cp=dig('meta.cachePolicy'), qr=dig('meta.qrCode');
+  const el=$('metaGrid2');
+  el.innerHTML=fld(cp,'appCacheTTLMs','APP 缓存有效期(ms)','num')+
+    fld(cp,'checkVersionOnLogin','登录时检查版本','bool')+
+    fld(qr,'format','二维码格式','text',{ph:'url / text'})+
+    fld(qr,'urlTemplate','二维码链接模板','text')+
+    // 携带字段不给人填:模板里写了哪些 {占位符} 就带哪些,永远一致
+    `<div class="field"><label>携带字段<span style="color:var(--text-3);font-weight:400"> · 自动</span></label>
+      <input class="inp" id="qrFields" readonly style="background:var(--bg-soft);color:var(--text-2)" />
+      <div style="font-size:11.5px;color:var(--text-3);margin-top:5px">从链接模板里的 {占位符} 自动提取</div></div>`;
+  syncQrFields(qr);
+  el.oninput=el.onchange=e=>{
+    const t=e.target; if(!t.dataset.hasOwnProperty('f'))return;
+    const target=['appCacheTTLMs','checkVersionOnLogin'].includes(t.dataset.k)?cp:qr;
+    setVal(target,t.dataset.k,t.type==='checkbox'?t.checked:t.value,t.dataset.t);
+    if(t.dataset.k==='urlTemplate') syncQrFields(qr);
+  };
+
+  const lc=dig('gateway.localCache'), rc=dig('gateway.reconnect');
+  const g=$('gwGrid');
+  g.innerHTML=fld(lc,'storage','缓存介质','text',{ph:'flash / ram'})+
+    fld(lc,'maxBufferSize','最大缓存条数','num')+
+    fld(lc,'maxBufferSizeMB','最大缓存(MB)','num')+
+    fld(lc,'batchUploadSize','断网恢复批量上传条数','num')+
+    fld(rc,'initialDelayMs','重连起始间隔(ms)','num')+
+    fld(rc,'maxDelayMs','重连最大间隔(ms)','num')+
+    fld(rc,'backoffMultiplier','退避倍数','num');
+  g.oninput=g.onchange=e=>{
+    const t=e.target; if(!t.dataset.hasOwnProperty('f'))return;
+    const target=['initialDelayMs','maxDelayMs','backoffMultiplier'].includes(t.dataset.k)?rc:lc;
+    setVal(target,t.dataset.k,t.value,t.dataset.t);
+  };
+}
+
+/** 携带字段跟着链接模板走(与后端 ModelSpec.SyncQrFields 同一套规则)。 */
+function syncQrFields(qr){
+  const list=[];
+  (qr.urlTemplate||'').replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g,(_,n)=>{ if(!list.includes(n))list.push(n); return _; });
+  qr.fields=list;
+  const box=$('qrFields');
+  if(box) box.value=list.length?list.join(', '):'（模板里没有占位符）';
+}
+
+// ---------- MQTT ----------
+let PLATFORM_TOPICS=null;
+function renderMqtt(){
+  const q=dig('mqtt');
+  bindForm('mqttGrid',q,
+    fld(q,'broker','接入点 broker','text')+fld(q,'port','端口','num')+
+    fld(q,'instanceId','实例 ID','text')+fld(q,'groupId','GroupID','text')+
+    fld(q,'clientIdPrefix','clientId 前缀','text')+
+    fld(q,'accessKey','AccessKey','text')+fld(q,'secretKey','SecretKey','text')+
+    fld(q,'keepAlive','心跳(秒)','num')+fld(q,'cleanSession','cleanSession','bool'));
+  const t=dig('mqttTopics');
+  bindForm('topicGrid',t,
+    fld(t,'deviceData','数据上报','text')+fld(t,'command','指令下发','text')+
+    fld(t,'commandReply','指令回执','text')+fld(t,'alarm','告警上报','text')+
+    fld(t,'online','上下线','text')+fld(t,'configUpdate','配置变更','text'));
+  checkTopics();
+}
+function checkTopics(){
+  const t=CFG.mqttTopics||{}, w=$('topicWarn');
+  if(!PLATFORM_TOPICS){w.textContent='';return;}
+  // 后端把 MqttTopicTemplates 序列化成 camelCase，键名与这里一一对应
+  const keys=['deviceData','command','commandReply','alarm','online','configUpdate'];
+  const bad=keys.filter(k=>t[k]&&PLATFORM_TOPICS[k]&&t[k]!==PLATFORM_TOPICS[k]);
+  w.innerHTML=bad.length
+    ? `<span style="color:var(--warn)">⚠ ${bad.join('、')} 与平台 appsettings 里配置的 Topic 不一致，平台会订不到这些消息。</span>`
+    : `<span style="color:var(--ok)">✓ 与平台订阅的 Topic 一致</span>`;
+}
+
+// ---------- 数据字段 ----------
+const DT=['float','int','bool','enum','string'];
+function renderFields(){
+  const arr=CFG.dataFields=CFG.dataFields||[];
+  $('fieldsBox').innerHTML=tbl(arr,[
+    {k:'identifier',label:'identifier *',t:'text',w:'150px',ph:'fuwen1',mono:1},
+    {k:'name',label:'显示名',t:'text',w:'130px',ph:'釜温1'},
+    {k:'dataType',label:'类型',t:'select',w:'92px',opts:DT},
+    {k:'unit',label:'单位',t:'text',w:'70px',ph:'℃'},
+    {k:'min',label:'最小',t:'num',w:'80px'},
+    {k:'max',label:'最大',t:'num',w:'80px'},
+    {k:'step',label:'步长',t:'num',w:'70px'},
+    {k:'options',label:'枚举取值（0=停止, 1=运行）',t:'opts'},
+    {k:'required',label:'必填',t:'bool',w:'50px'},
+  ],'fields');
+  bindTbl('fieldsBox',()=>CFG.dataFields,renderFields);
+}
+
+// ---------- 控制指令 ----------
+function renderCmds(){
+  const arr=CFG.serviceCommands=CFG.serviceCommands||[];
+  const box=$('cmdsBox');
+  if(!arr.length){box.innerHTML=`<div class="blank">还没有指令，点右上角添加</div>`;box.onclick=box.oninput=null;return;}
+  box.innerHTML=arr.map((c,i)=>`<div class="item-card">
+    <div class="hd">
+      <input class="inp mono" style="width:170px" data-c="${i}" data-k="identifier" value="${esc(c.identifier||'')}" placeholder="startStir"/>
+      <input class="inp" style="width:170px" data-c="${i}" data-k="name" value="${esc(c.name||'')}" placeholder="启动搅拌"/>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text-2)">
+        <input type="checkbox" data-c="${i}" data-k="sync" data-t="bool" ${c.sync?'checked':''}/> 同步指令(必须立即回执)</label>
+      <div style="flex:1"></div>
+      <button class="ib" data-mvc="-1" data-i="${i}">${ICON_UP}</button>
+      <button class="ib" data-mvc="1" data-i="${i}">${ICON_DN}</button>
+      <button class="ib del" data-rmc="${i}">${ICON_DEL}</button>
+    </div>
+    <div class="sub-block"><h4>入参 inputParams<div class="sp"></div>
+      <button class="ghost-btn btn-xs" data-addp="${i}" data-w="inputParams">+ 添加</button></h4>
+      ${paramTbl(c.inputParams||[],i,'inputParams')}</div>
+    <div class="sub-block"><h4>出参 outputParams<div class="sp"></div>
+      <button class="ghost-btn btn-xs" data-addp="${i}" data-w="outputParams">+ 添加</button></h4>
+      ${paramTbl(c.outputParams||[],i,'outputParams')}</div>
+  </div>`).join('');
+
+  box.oninput=box.onchange=e=>{
+    const t=e.target;
+    if(t.dataset.c!==undefined&&t.dataset.k){
+      setVal(arr[+t.dataset.c],t.dataset.k,t.type==='checkbox'?t.checked:t.value,t.dataset.t);return;}
+    if(t.dataset.p!==undefined){
+      const c=arr[+t.dataset.ci]; const list=c[t.dataset.w]=c[t.dataset.w]||[];
+      setVal(list[+t.dataset.p],t.dataset.k,t.value,t.dataset.t);}
+  };
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    if(b.dataset.rmc!==undefined){arr.splice(+b.dataset.rmc,1);}
+    else if(b.dataset.mvc!==undefined){
+      const i=+b.dataset.i,j=i+(+b.dataset.mvc); if(j<0||j>=arr.length)return; [arr[i],arr[j]]=[arr[j],arr[i]];}
+    else if(b.dataset.addp!==undefined){
+      const c=arr[+b.dataset.addp]; const w=b.dataset.w;
+      (c[w]=c[w]||[]).push(w==='outputParams'
+        ?{identifier:'result',name:'执行结果',dataType:'enum',options:{'0':'成功','1':'失败'}}
+        :{identifier:'',name:'',dataType:'float'});}
+    else if(b.dataset.rmp!==undefined){
+      const c=arr[+b.dataset.ci]; c[b.dataset.w].splice(+b.dataset.rmp,1);}
+    else return;
+    markDirty(); renderCmds();
+  };
+}
+function paramTbl(ps,ci,which){
+  if(!ps.length)return `<div style="font-size:12.5px;color:var(--text-3);padding:4px 0">无</div>`;
+  return `<table class="tbl"><thead><tr>
+    <th style="width:140px">identifier</th><th style="width:120px">名称</th><th style="width:88px">类型</th>
+    <th style="width:66px">单位</th><th style="width:76px">最小</th><th style="width:76px">最大</th><th style="width:66px">步长</th>
+    <th>枚举取值</th><th class="act"></th></tr></thead><tbody>
+    ${ps.map((p,i)=>`<tr>
+      <td><input class="mono" data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="identifier" value="${esc(p.identifier||'')}"/></td>
+      <td><input data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="name" value="${esc(p.name||'')}"/></td>
+      <td><select data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="dataType">
+        ${DT.map(d=>`<option ${p.dataType===d?'selected':''}>${d}</option>`).join('')}</select></td>
+      <td><input data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="unit" value="${esc(p.unit||'')}"/></td>
+      <td><input type="number" step="any" data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="min" data-t="num" value="${p.min??''}"/></td>
+      <td><input type="number" step="any" data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="max" data-t="num" value="${p.max??''}"/></td>
+      <td><input type="number" step="any" data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="step" data-t="num" value="${p.step??''}"/></td>
+      <td><input data-p="${i}" data-ci="${ci}" data-w="${which}" data-k="options" data-t="opts" value="${esc(optsToText(p.options))}" placeholder="0=关闭, 1=开启"/></td>
+      <td class="act"><button class="ib del" data-rmp="${i}" data-ci="${ci}" data-w="${which}">${ICON_DEL}</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ---------- 告警 ----------
+function renderAlarms(){
+  const arr=CFG.alarmEvents=CFG.alarmEvents||[];
+  const box=$('alarmsBox');
+  if(!arr.length){box.innerHTML=`<div class="blank">还没有告警事件，点右上角添加</div>`;box.onclick=box.oninput=null;return;}
+  const fieldOpts=[{v:'',l:'（不绑定字段）'}].concat((CFG.dataFields||[]).map(f=>({v:f.identifier,l:`${f.identifier}${f.name?' · '+f.name:''}`})));
+  box.innerHTML=arr.map((a,i)=>{
+    const tc=a.triggerConditions||{};
+    return `<div class="item-card">
+    <div class="hd">
+      <input class="inp mono" style="width:160px" data-a="${i}" data-k="identifier" value="${esc(a.identifier||'')}" placeholder="tempAlarm"/>
+      <input class="inp" style="width:170px" data-a="${i}" data-k="name" value="${esc(a.name||'')}" placeholder="温度异常报警"/>
+      <select class="inp" style="width:110px" data-a="${i}" data-k="level">
+        ${['info','warn','alert','error'].map(l=>`<option ${a.level===l?'selected':''}>${l}</option>`).join('')}</select>
+      <div style="flex:1"></div>
+      <button class="ib" data-mva="-1" data-i="${i}">${ICON_UP}</button>
+      <button class="ib" data-mva="1" data-i="${i}">${ICON_DN}</button>
+      <button class="ib del" data-rma="${i}">${ICON_DEL}</button>
+    </div>
+    <div class="sub-block"><h4>触发条件</h4>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="width:210px"><label class="lab">监视字段</label>
+          <select class="inp" style="height:38px" data-tc="${i}" data-k="field">
+            ${fieldOpts.map(o=>`<option value="${esc(o.v)}" ${tc.field===o.v?'selected':''}>${esc(o.l)}</option>`).join('')}</select></div>
+        <div style="width:120px"><label class="lab">警告上限</label>
+          <input class="inp" style="height:38px" type="number" step="any" data-tc="${i}" data-k="warningMax" data-t="num" value="${tc.warningMax??''}"/></div>
+        <div style="width:120px"><label class="lab">危险上限</label>
+          <input class="inp" style="height:38px" type="number" step="any" data-tc="${i}" data-k="dangerMax" data-t="num" value="${tc.dangerMax??''}"/></div>
+        <div style="width:120px"><label class="lab">警告下限</label>
+          <input class="inp" style="height:38px" type="number" step="any" data-tc="${i}" data-k="warningMin" data-t="num" value="${tc.warningMin??''}"/></div>
+      </div></div>
+    <div class="sub-block"><h4>告警参数 params<div class="sp"></div>
+      <button class="ghost-btn btn-xs" data-adda="${i}">+ 添加</button></h4>
+      ${alarmParamTbl(a.params||[],i)}</div>
+  </div>`;}).join('');
+
+  box.oninput=box.onchange=e=>{
+    const t=e.target;
+    if(t.dataset.a!==undefined&&t.dataset.k){setVal(arr[+t.dataset.a],t.dataset.k,t.value,t.dataset.t);return;}
+    if(t.dataset.tc!==undefined){
+      const a=arr[+t.dataset.tc]; a.triggerConditions=a.triggerConditions||{};
+      setVal(a.triggerConditions,t.dataset.k,t.value,t.dataset.t);return;}
+    if(t.dataset.ap!==undefined){
+      const a=arr[+t.dataset.ai]; setVal((a.params=a.params||[])[+t.dataset.ap],t.dataset.k,t.value,t.dataset.t);}
+  };
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    if(b.dataset.rma!==undefined){arr.splice(+b.dataset.rma,1);}
+    else if(b.dataset.mva!==undefined){
+      const i=+b.dataset.i,j=i+(+b.dataset.mva); if(j<0||j>=arr.length)return; [arr[i],arr[j]]=[arr[j],arr[i]];}
+    else if(b.dataset.adda!==undefined){
+      const a=arr[+b.dataset.adda]; (a.params=a.params||[]).push({identifier:'',name:'',dataType:'float'});}
+    else if(b.dataset.rmap!==undefined){arr[+b.dataset.ai].params.splice(+b.dataset.rmap,1);}
+    else return;
+    markDirty(); renderAlarms();
+  };
+}
+function alarmParamTbl(ps,ai){
+  if(!ps.length)return `<div style="font-size:12.5px;color:var(--text-3);padding:4px 0">无</div>`;
+  return `<table class="tbl"><thead><tr><th style="width:150px">identifier</th><th style="width:130px">名称</th>
+    <th style="width:92px">类型</th><th style="width:70px">单位</th><th>枚举取值</th><th class="act"></th></tr></thead><tbody>
+    ${ps.map((p,i)=>`<tr>
+      <td><input class="mono" data-ap="${i}" data-ai="${ai}" data-k="identifier" value="${esc(p.identifier||'')}"/></td>
+      <td><input data-ap="${i}" data-ai="${ai}" data-k="name" value="${esc(p.name||'')}"/></td>
+      <td><select data-ap="${i}" data-ai="${ai}" data-k="dataType">
+        ${DT.map(d=>`<option ${p.dataType===d?'selected':''}>${d}</option>`).join('')}</select></td>
+      <td><input data-ap="${i}" data-ai="${ai}" data-k="unit" value="${esc(p.unit||'')}"/></td>
+      <td><input data-ap="${i}" data-ai="${ai}" data-k="options" data-t="opts" value="${esc(optsToText(p.options))}" placeholder="1=温度过高, 2=温度过低"/></td>
+      <td class="act"><button class="ib del" data-rmap="${i}" data-ai="${ai}">${ICON_DEL}</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ---------- Modbus ----------
+function renderModbus(){
+  const mb=dig('modbus');
+  mb.ports=mb.ports||[]; mb.registerMap=mb.registerMap||[]; mb.writeMap=mb.writeMap||[];
+
+  $('portsBox').innerHTML=tbl(mb.ports,[
+    {k:'portId',label:'portId *',t:'text',w:'100px',ph:'port1',mono:1},
+    {k:'protocol',label:'协议',t:'select',w:'86px',opts:['RTU','TCP','ASCII']},
+    {k:'interface',label:'串口设备',t:'text',w:'130px',ph:'/dev/ttyS1'},
+    {k:'baudRate',label:'波特率',t:'num',w:'90px'},
+    {k:'dataBits',label:'数据位',t:'num',w:'72px'},
+    {k:'stopBits',label:'停止位',t:'num',w:'72px'},
+    {k:'parity',label:'校验',t:'select',w:'86px',opts:['none','even','odd']},
+    {k:'host',label:'TCP 主机',t:'text',w:'120px',ph:'仅 TCP'},
+    {k:'port',label:'TCP 端口',t:'num',w:'86px'},
+    {k:'timeout',label:'超时ms',t:'num',w:'80px'},
+  ],'ports');
+  bindTbl('portsBox',()=>CFG.modbus.ports,renderModbus);
+
+  bindForm('pollGrid',mb,
+    fld(mb,'slaveId','默认从站号','num')+
+    fld(mb,'pollIntervalMs','轮询周期(ms)','num')+
+    fld(mb,'reportMode','上报方式','select',['interval','change','both'])+
+    fld(mb,'reportIntervalMs','定时上报周期(ms)','num')+
+    fld(mb,'changeThreshold','变化上报阈值','num')+
+    fld(mb,'heartbeatIntervalMs','心跳周期(ms)','num')+
+    fld(mb,'offlineTimeoutMs','离线判定(ms)','num'));
+
+  const fieldOpts=(CFG.dataFields||[]).map(f=>({v:f.identifier,l:`${f.identifier}${f.name?' · '+f.name:''}`}));
+  const portOpts=mb.ports.map(p=>p.portId).filter(Boolean);
+  $('regBox').innerHTML=tbl(mb.registerMap,[
+    {k:'identifier',label:'数据字段 *',t:'select',w:'170px',opts:[{v:'',l:'—'}].concat(fieldOpts)},
+    {k:'portId',label:'端口',t:'select',w:'92px',opts:[''].concat(portOpts)},
+    {k:'address',label:'地址 *',t:'num',w:'92px'},
+    {k:'functionCode',label:'功能码',t:'select',w:'150px',num:1,opts:[
+      {v:3,l:'3 保持寄存器'},{v:4,l:'4 输入寄存器'},{v:1,l:'1 线圈'},{v:2,l:'2 离散量'}]},
+    {k:'dataType',label:'寄存器类型',t:'select',w:'110px',opts:['int16','uint16','int32','uint32','float32','bit','string']},
+    {k:'registerCount',label:'个数',t:'num',w:'62px'},
+    {k:'bitIndex',label:'位',t:'num',w:'56px'},
+    {k:'scale',label:'缩放',t:'num',w:'72px'},
+    {k:'offset',label:'偏移',t:'num',w:'66px'},
+    {k:'byteOrder',label:'字节序',t:'select',w:'86px',opts:['','AB','BA','ABCD','CDAB','BADC','DCBA']},
+    {k:'slaveId',label:'站号',t:'num',w:'62px'},
+    {k:'retryCount',label:'重试',t:'num',w:'62px'},
+    {k:'failAction',label:'失败处理',t:'select',w:'112px',opts:['skip','reportFault','useLast']},
+  ],'reg');
+  bindTbl('regBox',()=>CFG.modbus.registerMap,renderModbus);
+
+  renderWrites(portOpts);
+}
+function renderWrites(portOpts){
+  const wm=CFG.modbus.writeMap, cmds=CFG.serviceCommands||[];
+  const box=$('writeBox');
+  if(!wm.length){box.innerHTML=`<div class="blank">还没有写映射。点「按指令补齐」为每条指令生成一条空映射</div>`;box.onclick=box.oninput=null;return;}
+  box.innerHTML=wm.map((w,i)=>{
+    const cmd=cmds.find(c=>c.identifier===w.serviceIdentifier);
+    const inOpts=[{v:'',l:'（固定值）'}].concat(((cmd&&cmd.inputParams)||[]).map(p=>({v:p.identifier,l:p.identifier+(p.name?' · '+p.name:'')})));
+    return `<div class="item-card">
+      <div class="hd">
+        <span style="font-size:12px;color:var(--text-2)">指令</span>
+        <select class="inp" style="width:230px" data-w="${i}" data-k="serviceIdentifier">
+          ${[{v:'',l:'—'}].concat(cmds.map(c=>({v:c.identifier,l:c.identifier+(c.name?' · '+c.name:'')})))
+            .map(o=>`<option value="${esc(o.v)}" ${w.serviceIdentifier===o.v?'selected':''}>${esc(o.l)}</option>`).join('')}
+        </select>
+        <div style="flex:1"></div>
+        <button class="ghost-btn btn-xs" data-addw="${i}">+ 添加写操作</button>
+        <button class="ib del" data-rmw="${i}">${ICON_DEL}</button>
+      </div>
+      <div class="sub-block"><h4>写操作（按顺序执行）</h4>
+      ${!(w.writes||[]).length?`<div style="font-size:12.5px;color:var(--text-3);padding:4px 0">无</div>`:
+      `<table class="tbl"><thead><tr>
+        <th style="width:92px">端口</th><th style="width:92px">地址 *</th><th style="width:150px">功能码</th>
+        <th style="width:170px">取值来源</th><th style="width:90px">固定值</th><th style="width:74px">缩放</th>
+        <th style="width:66px">个数</th><th style="width:62px">站号</th><th>备注</th><th class="act"></th></tr></thead><tbody>
+        ${(w.writes||[]).map((o,j)=>`<tr>
+          <td><select data-wi="${i}" data-j="${j}" data-k="portId">
+            ${[''].concat(portOpts).map(p=>`<option ${o.portId===p?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
+          <td><input type="number" step="any" data-wi="${i}" data-j="${j}" data-k="address" data-t="num" value="${o.address??''}"/></td>
+          <td><select data-wi="${i}" data-j="${j}" data-k="functionCode" data-t="num">
+            ${[{v:6,l:'6 写单寄存器'},{v:16,l:'16 写多寄存器'},{v:5,l:'5 写单线圈'},{v:15,l:'15 写多线圈'}]
+              .map(f=>`<option value="${f.v}" ${o.functionCode===f.v?'selected':''}>${f.l}</option>`).join('')}</select></td>
+          <td><select data-wi="${i}" data-j="${j}" data-k="inputIdentifier">
+            ${inOpts.map(p=>`<option value="${esc(p.v)}" ${o.inputIdentifier===p.v?'selected':''}>${esc(p.l)}</option>`).join('')}</select></td>
+          <td><input type="number" step="any" data-wi="${i}" data-j="${j}" data-k="value" data-t="num" value="${o.value??''}"/></td>
+          <td><input type="number" step="any" data-wi="${i}" data-j="${j}" data-k="scale" data-t="num" value="${o.scale??''}"/></td>
+          <td><input type="number" step="any" data-wi="${i}" data-j="${j}" data-k="registerCount" data-t="num" value="${o.registerCount??''}"/></td>
+          <td><input type="number" step="any" data-wi="${i}" data-j="${j}" data-k="slaveId" data-t="num" value="${o.slaveId??''}"/></td>
+          <td><input data-wi="${i}" data-j="${j}" data-k="comment" value="${esc(o.comment||'')}" placeholder="写1=启动"/></td>
+          <td class="act"><button class="ib del" data-rmwo="${j}" data-wi="${i}">${ICON_DEL}</button></td>
+        </tr>`).join('')}</tbody></table>`}
+      </div></div>`;}).join('');
+
+  box.oninput=box.onchange=e=>{
+    const t=e.target;
+    if(t.dataset.w!==undefined&&t.dataset.k){setVal(wm[+t.dataset.w],t.dataset.k,t.value,t.dataset.t);renderWrites(portOpts);return;}
+    if(t.dataset.wi!==undefined&&t.dataset.j!==undefined){
+      const o=wm[+t.dataset.wi].writes[+t.dataset.j];
+      setVal(o,t.dataset.k,t.value,t.dataset.t);
+      // 选了入参就说明取值来自入参,把 valueFrom 标上;选回「固定值」就撤掉
+      if(t.dataset.k==='inputIdentifier'){ if(t.value)o.valueFrom='input'; else delete o.valueFrom; }
+    }
+  };
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    if(b.dataset.rmw!==undefined){wm.splice(+b.dataset.rmw,1);}
+    else if(b.dataset.addw!==undefined){const w=wm[+b.dataset.addw];(w.writes=w.writes||[]).push({functionCode:6,scale:1});}
+    else if(b.dataset.rmwo!==undefined){wm[+b.dataset.wi].writes.splice(+b.dataset.rmwo,1);}
+    else return;
+    markDirty(); renderWrites(portOpts);
+  };
+}
+
+// ---------- APP 界面 ----------
+const WIDGETS=['number','pvSvGauge','gauge','statusLight','progressBar','switch','text','table'];
+function renderUi(){
+  const d=dig('display'); d.groups=d.groups||[];
+  const fieldOpts=(CFG.dataFields||[]).map(f=>({v:f.identifier,l:`${f.identifier}${f.name?' · '+f.name:''}`}));
+  const box=$('displayBox');
+  box.innerHTML=!d.groups.length?`<div class="blank">还没有分组。点「按数据契约自动生成」一键铺一套</div>`:
+    d.groups.map((g,gi)=>`<div class="item-card">
+      <div class="hd">
+        <input class="inp mono" style="width:130px" data-g="${gi}" data-k="groupId" value="${esc(g.groupId||'')}" placeholder="temp"/>
+        <input class="inp" style="width:160px" data-g="${gi}" data-k="groupName" value="${esc(g.groupName||'')}" placeholder="温度数据"/>
+        <input class="inp" style="width:90px" type="number" data-g="${gi}" data-k="sortOrder" data-t="num" value="${g.sortOrder??''}" placeholder="排序"/>
+        <div style="flex:1"></div>
+        <button class="ghost-btn btn-xs" data-addf="${gi}">+ 添加控件</button>
+        <button class="ib del" data-rmg="${gi}">${ICON_DEL}</button>
+      </div>
+      <div class="sub-block"><h4>控件</h4>
+      ${!(g.fields||[]).length?`<div style="font-size:12.5px;color:var(--text-3);padding:4px 0">无</div>`:
+      `<table class="tbl"><thead><tr><th style="width:200px">绑定字段</th><th style="width:150px">显示名</th>
+        <th style="width:130px">控件类型</th><th style="width:110px">权限</th><th style="width:96px">显示时间</th>
+        <th>过期毫秒</th><th class="act"></th></tr></thead><tbody>
+        ${(g.fields||[]).map((f,fi)=>`<tr>
+          <td><select data-gi="${gi}" data-fi="${fi}" data-k="identifier">
+            ${[{v:'',l:'—'}].concat(fieldOpts).map(o=>`<option value="${esc(o.v)}" ${f.identifier===o.v?'selected':''}>${esc(o.l)}</option>`).join('')}
+            ${f.identifier&&f.identifier.startsWith('_')?`<option value="${esc(f.identifier)}" selected>${esc(f.identifier)}（合成控件）</option>`:''}
+            </select></td>
+          <td><input data-gi="${gi}" data-fi="${fi}" data-k="displayName" value="${esc(f.displayName||'')}"/></td>
+          <td><select data-gi="${gi}" data-fi="${fi}" data-k="widgetType">
+            ${WIDGETS.map(w=>`<option ${f.widgetType===w?'selected':''}>${w}</option>`).join('')}</select></td>
+          <td><select data-gi="${gi}" data-fi="${fi}" data-k="requiredPermission">
+            ${[{v:'',l:'监控'},{v:'control',l:'需控制权限'}].map(o=>`<option value="${esc(o.v)}" ${(f.requiredPermission||'')===o.v?'selected':''}>${esc(o.l)}</option>`).join('')}</select></td>
+          <td><input type="checkbox" data-gi="${gi}" data-fi="${fi}" data-k="showTimestamp" data-t="bool" ${f.showTimestamp?'checked':''} style="width:auto"/></td>
+          <td><input type="number" data-gi="${gi}" data-fi="${fi}" data-k="staleTimeoutMs" data-t="num" value="${f.staleTimeoutMs??''}"/></td>
+          <td class="act"><button class="ib del" data-rmf="${fi}" data-gi="${gi}">${ICON_DEL}</button></td>
+        </tr>`).join('')}</tbody></table>`}
+      </div></div>`).join('');
+
+  box.oninput=box.onchange=e=>{
+    const t=e.target;
+    if(t.dataset.g!==undefined&&t.dataset.k){setVal(d.groups[+t.dataset.g],t.dataset.k,t.value,t.dataset.t);return;}
+    if(t.dataset.gi!==undefined&&t.dataset.fi!==undefined){
+      setVal(d.groups[+t.dataset.gi].fields[+t.dataset.fi],t.dataset.k,
+        t.type==='checkbox'?t.checked:t.value,t.dataset.t);}
+  };
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    if(b.dataset.rmg!==undefined){d.groups.splice(+b.dataset.rmg,1);}
+    else if(b.dataset.addf!==undefined){const g=d.groups[+b.dataset.addf];
+      (g.fields=g.fields||[]).push({identifier:'',displayName:'',widgetType:'number',config:{},showTimestamp:true,staleTimeoutMs:30000});}
+    else if(b.dataset.rmf!==undefined){d.groups[+b.dataset.gi].fields.splice(+b.dataset.rmf,1);}
+    else return;
+    markDirty(); renderUi();
+  };
+
+  const hc=dig('display.historyChart');
+  bindForm('chartGrid',hc,
+    fld(hc,'defaultRange','默认区间','select',['1h','6h','24h','7d','30d'])+
+    fld(hc,'chartType','图表类型','select',['line','area','bar'])+
+    fld(hc,'fields','曲线字段','arr',{ph:'fuwen1, pressure1'})+
+    fld(hc,'enableExport','允许导出','bool'));
+
+  renderCmdUi();
+}
+function renderCmdUi(){
+  const c=dig('commands'); c.groups=c.groups||[];
+  const cmds=CFG.serviceCommands||[];
+  const box=$('cmdUiBox');
+  box.innerHTML=!c.groups.length?`<div class="blank">还没有分组。点上面的「按数据契约自动生成」会一起铺好</div>`:
+    c.groups.map((g,gi)=>`<div class="item-card">
+      <div class="hd">
+        <input class="inp mono" style="width:140px" data-cg="${gi}" data-k="groupId" value="${esc(g.groupId||'')}"/>
+        <input class="inp" style="width:160px" data-cg="${gi}" data-k="groupName" value="${esc(g.groupName||'')}"/>
+        <input class="inp" style="width:90px" type="number" data-cg="${gi}" data-k="sortOrder" data-t="num" value="${g.sortOrder??''}" placeholder="排序"/>
+        <div style="flex:1"></div>
+        <button class="ghost-btn btn-xs" data-addi="${gi}">+ 添加按钮</button>
+        <button class="ib del" data-rmcg="${gi}">${ICON_DEL}</button>
+      </div>
+      <div class="sub-block"><h4>按钮</h4>
+      ${!(g.items||[]).length?`<div style="font-size:12.5px;color:var(--text-3);padding:4px 0">无</div>`:
+      `<table class="tbl"><thead><tr><th style="width:220px">指令</th><th style="width:150px">显示名</th>
+        <th style="width:140px">控件</th><th style="width:110px">样式</th><th style="width:80px">需确认</th>
+        <th>确认文案</th><th class="act"></th></tr></thead><tbody>
+        ${(g.items||[]).map((it,ii)=>{const cf=it.config=it.config||{};return `<tr>
+          <td><select data-cgi="${gi}" data-ii="${ii}" data-k="serviceIdentifier">
+            ${[{v:'',l:'—'}].concat(cmds.map(x=>({v:x.identifier,l:x.identifier+(x.name?' · '+x.name:'')})))
+              .map(o=>`<option value="${esc(o.v)}" ${it.serviceIdentifier===o.v?'selected':''}>${esc(o.l)}</option>`).join('')}</select></td>
+          <td><input data-cgi="${gi}" data-ii="${ii}" data-k="displayName" value="${esc(it.displayName||'')}"/></td>
+          <td><select data-cgi="${gi}" data-ii="${ii}" data-k="widgetType">
+            ${['button','inputWithButton','form'].map(w=>`<option ${it.widgetType===w?'selected':''}>${w}</option>`).join('')}</select></td>
+          <td><select data-cfg="${gi}" data-ii="${ii}" data-k="style">
+            ${['primary','default','danger'].map(s=>`<option ${cf.style===s?'selected':''}>${s}</option>`).join('')}</select></td>
+          <td><input type="checkbox" data-cfg="${gi}" data-ii="${ii}" data-k="confirmRequired" data-t="bool" ${cf.confirmRequired?'checked':''} style="width:auto"/></td>
+          <td><input data-cfg="${gi}" data-ii="${ii}" data-k="confirmMessage" value="${esc(cf.confirmMessage||'')}"/></td>
+          <td class="act"><button class="ib del" data-rmi="${ii}" data-cgi="${gi}">${ICON_DEL}</button></td>
+        </tr>`;}).join('')}</tbody></table>`}
+      </div></div>`).join('');
+
+  box.oninput=box.onchange=e=>{
+    const t=e.target;
+    if(t.dataset.cg!==undefined&&t.dataset.k){setVal(c.groups[+t.dataset.cg],t.dataset.k,t.value,t.dataset.t);return;}
+    if(t.dataset.cgi!==undefined&&t.dataset.ii!==undefined){
+      setVal(c.groups[+t.dataset.cgi].items[+t.dataset.ii],t.dataset.k,t.value,t.dataset.t);return;}
+    if(t.dataset.cfg!==undefined&&t.dataset.ii!==undefined){
+      const it=c.groups[+t.dataset.cfg].items[+t.dataset.ii]; it.config=it.config||{};
+      setVal(it.config,t.dataset.k,t.type==='checkbox'?t.checked:t.value,t.dataset.t);}
+  };
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    if(b.dataset.rmcg!==undefined){c.groups.splice(+b.dataset.rmcg,1);}
+    else if(b.dataset.addi!==undefined){const g=c.groups[+b.dataset.addi];
+      (g.items=g.items||[]).push({serviceIdentifier:'',displayName:'',widgetType:'button',config:{style:'default'},inputFields:[]});}
+    else if(b.dataset.rmi!==undefined){c.groups[+b.dataset.cgi].items.splice(+b.dataset.rmi,1);}
+    else return;
+    markDirty(); renderCmdUi();
+  };
+}
+
+// ---------- 一键生成 ----------
+/** 按数据契约铺一套默认的 APP 界面。已有的分组会被替换。 */
+function autoUi(){
+  const fields=CFG.dataFields||[], cmds=CFG.serviceCommands||[];
+  if(!fields.length&&!cmds.length){alert('先定义数据字段和控制指令');return;}
+  if((CFG.display?.groups||[]).length&&!confirm('会覆盖现有的展示分组和按钮分组，继续？'))return;
+
+  // 开关类字段:若有指令的入参名与它同名/近似,就渲染成 switch 并挂上那条指令
+  const switchable={};
+  cmds.forEach(c=>(c.inputParams||[]).forEach(p=>{
+    const hit=fields.find(f=>f.identifier===p.identifier||f.identifier===c.identifier.replace(/^set/,'').replace(/^./,ch=>ch.toLowerCase()));
+    if(hit&&(hit.dataType==='bool'))switchable[hit.identifier]={service:c.identifier,input:p.identifier};
+  }));
+
+  const num=[], sw=[], st=[], txt=[];
+  fields.forEach(f=>{
+    if(f.dataType==='string'){txt.push(f);}
+    else if(f.dataType==='bool'){ (switchable[f.identifier]?sw:st).push(f); }
+    else if(f.dataType==='enum'){st.push(f);}
+    else num.push(f);
+  });
+
+  const groups=[];
+  if(num.length)groups.push({groupId:'data',groupName:'运行数据',sortOrder:1,fields:num.map(f=>({
+    identifier:f.identifier,displayName:f.name||f.identifier,
+    widgetType:(f.min!=null&&f.max!=null&&f.dataType==='float')?'gauge':'number',
+    config:Object.assign({decimal:decOf(f.step),suffix:f.unit||''},
+      (f.min!=null&&f.max!=null)?{min:f.min,max:f.max}:{}),
+    showTimestamp:true,staleTimeoutMs:30000}))});
+  if(sw.length)groups.push({groupId:'switches',groupName:'开关控制',sortOrder:2,fields:sw.map(f=>({
+    identifier:f.identifier,displayName:f.name||f.identifier,widgetType:'switch',
+    config:{onLabel:(f.options&&f.options['1'])||'开启',offLabel:(f.options&&f.options['0'])||'关闭',
+      serviceIdentifier:switchable[f.identifier].service,inputIdentifier:switchable[f.identifier].input,
+      confirmRequired:true,confirmMessage:`确认切换${f.name||f.identifier}？`},
+    requiredPermission:'control',showTimestamp:false,staleTimeoutMs:30000}))});
+  if(st.length)groups.push({groupId:'status',groupName:'设备状态',sortOrder:3,fields:st.map(f=>({
+    identifier:f.identifier,displayName:f.name||f.identifier,widgetType:'statusLight',
+    config:{mapping:mapOf(f.options)},showTimestamp:false,staleTimeoutMs:30000}))});
+  if(txt.length)groups.push({groupId:'info',groupName:'设备信息',sortOrder:99,fields:txt.map(f=>({
+    identifier:f.identifier,displayName:f.name||f.identifier,widgetType:'text',
+    config:{},showTimestamp:false,staleTimeoutMs:null}))});
+
+  CFG.display=CFG.display||{};
+  CFG.display.groups=groups;
+  CFG.display.historyChart={defaultRange:'24h',chartType:'line',enableExport:true,
+    fields:num.slice(0,6).map(f=>f.identifier)};
+
+  CFG.commands={groups:cmds.length?[{groupId:'control',groupName:'控制指令',sortOrder:1,
+    items:cmds.map(c=>{
+      const ins=c.inputParams||[];
+      return {serviceIdentifier:c.identifier,displayName:c.name||c.identifier,
+        widgetType:ins.length===0?'button':(ins.length===1?'inputWithButton':'form'),
+        config:{style:/emergency|stop/i.test(c.identifier)?'danger':'primary',confirmRequired:true,
+          confirmMessage:`确认${c.name||c.identifier}？`},
+        inputFields:ins.map(p=>({identifier:p.identifier,label:p.name||p.identifier,
+          widgetType:p.dataType==='enum'||p.dataType==='bool'?'select':
+            (p.dataType==='int'&&p.min!=null&&p.max!=null?'slider':'numberInput'),
+          config:Object.assign({},
+            p.options?{options:Object.entries(p.options).map(([v,l])=>({value:isNaN(+v)?v:+v,label:l}))}:{},
+            p.min!=null?{min:p.min}:{}, p.max!=null?{max:p.max}:{}, p.step!=null?{step:p.step}:{},
+            p.unit?{suffix:p.unit}:{})})),
+        disableWhen:null,
+        feedbackConfig:{pendingText:'指令发送中...',successText:'执行成功',successDurationMs:3000,
+          failText:'执行失败',showFailReason:true},
+        requiredPermission:'control'};
+    })}]:[]};
+
+  markDirty(); renderUi();
+  alert('已按数据契约生成默认界面配置，可以在下面继续微调。');
+}
+const decOf=s=>{if(s==null)return 1;const t=String(s);const i=t.indexOf('.');return i<0?0:t.length-i-1;};
+const mapOf=o=>{const m={};const c=['#888780','#639922','#E24B4A','#3B8BD4','#EF9F27'];
+  Object.entries(o||{'0':'关闭','1':'开启'}).forEach(([k,v],i)=>m[k]={label:v,color:c[i%c.length]});return m;};
+
+/** registerMap 里缺哪个字段就补一行,不动已有的 */
+function autoReg(){
+  const mb=dig('modbus'); mb.registerMap=mb.registerMap||[];
+  const have=new Set(mb.registerMap.map(r=>r.identifier));
+  const port=(mb.ports||[])[0]?.portId||'port1';
+  let n=0;
+  (CFG.dataFields||[]).forEach(f=>{
+    if(!f.identifier||have.has(f.identifier))return;
+    mb.registerMap.push({identifier:f.identifier,portId:port,address:null,
+      functionCode:f.dataType==='bool'?1:3,
+      dataType:f.dataType==='bool'?'bit':(f.dataType==='string'?'string':(f.dataType==='float'?'int16':'uint16')),
+      registerCount:1,scale:f.dataType==='float'?(f.step||0.1):1,offset:0,
+      byteOrder:'AB',slaveId:mb.slaveId||1,retryCount:3,failAction:'skip'});
+    n++;
+  });
+  markDirty(); renderModbus();
+  alert(n?`补齐了 ${n} 个字段的采集映射，地址需要你逐个填写。`:'所有字段都已经有采集映射了。');
+}
+/** writeMap 里缺哪条指令就补一条 */
+function autoWrite(){
+  const mb=dig('modbus'); mb.writeMap=mb.writeMap||[];
+  const have=new Set(mb.writeMap.map(w=>w.serviceIdentifier));
+  const port=(mb.ports||[])[0]?.portId||'port1';
+  let n=0;
+  (CFG.serviceCommands||[]).forEach(c=>{
+    if(!c.identifier||have.has(c.identifier))return;
+    const ins=c.inputParams||[];
+    mb.writeMap.push({serviceIdentifier:c.identifier,writes:ins.length
+      ? ins.map(p=>({portId:port,inputIdentifier:p.identifier,address:null,functionCode:6,
+          valueFrom:'input',scale:1,slaveId:mb.slaveId||1}))
+      : [{portId:port,address:null,functionCode:6,value:1,slaveId:mb.slaveId||1}]});
+    n++;
+  });
+  markDirty(); renderModbus();
+  alert(n?`补齐了 ${n} 条指令的写映射，地址需要你逐个填写。`:'所有指令都已经有写映射了。');
+}
+
+// ---------- 添加按钮 ----------
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-add]'); if(!b)return;
+  const w=b.dataset.add;
+  if(w==='fields'){(CFG.dataFields=CFG.dataFields||[]).push({identifier:'',name:'',dataType:'float',unit:'',step:0.1});renderFields();}
+  else if(w==='cmds'){(CFG.serviceCommands=CFG.serviceCommands||[]).push({identifier:'',name:'',inputParams:[],
+    outputParams:[{identifier:'result',name:'执行结果',dataType:'enum',options:{'0':'成功','1':'失败'}}]});renderCmds();}
+  else if(w==='alarms'){(CFG.alarmEvents=CFG.alarmEvents||[]).push({identifier:'',name:'',level:'alert',triggerConditions:{},params:[]});renderAlarms();}
+  else if(w==='port'){dig('modbus').ports=dig('modbus').ports||[];
+    CFG.modbus.ports.push({portId:'port'+(CFG.modbus.ports.length+1),protocol:'RTU',interface:'/dev/ttyS1',
+      baudRate:9600,dataBits:8,stopBits:1,parity:'none'});renderModbus();}
+  else if(w==='reg'){dig('modbus').registerMap=CFG.modbus.registerMap||[];
+    CFG.modbus.registerMap.push({identifier:'',portId:(CFG.modbus.ports||[])[0]?.portId||'port1',
+      functionCode:3,dataType:'int16',registerCount:1,scale:1,offset:0,byteOrder:'AB',
+      slaveId:CFG.modbus.slaveId||1,retryCount:3,failAction:'skip'});renderModbus();}
+  else if(w==='dgroup'){dig('display').groups=CFG.display.groups||[];
+    CFG.display.groups.push({groupId:'group'+(CFG.display.groups.length+1),groupName:'新分组',
+      sortOrder:CFG.display.groups.length+1,fields:[]});renderUi();}
+  else if(w==='cgroup'){dig('commands').groups=CFG.commands.groups||[];
+    CFG.commands.groups.push({groupId:'cgroup'+(CFG.commands.groups.length+1),groupName:'新分组',
+      sortOrder:CFG.commands.groups.length+1,items:[]});renderCmdUi();}
+  else return;
+  markDirty();
+});
+$('btnAutoUi').onclick=autoUi;
+$('btnAutoReg').onclick=autoReg;
+$('btnAutoWrite').onclick=autoWrite;
+
+// 把平台自己知道的东西(接入点/Topic/扫码链接)回填进来,免得对着 mqtt-cn-xxxxx 这种占位符猜
+$('btnPlatformFill').onclick=async()=>{
+  if(!confirm('会用平台 appsettings 里的接入点、Topic 和扫码链接覆盖当前值，继续？'))return;
+  if(DIRTY&&!await save())return;
+  const r=await fetch('/admin/models/'+encodeURIComponent(CUR.productKey)+'/apply-platform-defaults',{method:'POST'});
+  if(!r.ok){alert(await errText(r));return;}
+  const d=await r.json();
+  CFG=d.config; CUR.revision=d.revision;
+  $('edSub').textContent=`${CUR.productKey} · v${CUR.modelVersion} · rev${d.revision} · ${CUR.status==='published'?'已发布':'草稿'}`;
+  clearDirty(); renderAll(); toast('已用平台配置填充');
+};
+
+// ---------- 保存 / 校验 / 导出 / 发布 ----------
+function showIssues(issues){
+  const box=$('issBox'), sum=$('issSummary');
+  const nf=issues.filter(i=>i.severity==='fatal').length;
+  const ne=issues.filter(i=>i.severity==='error').length;
+  const nw=issues.filter(i=>i.severity==='warn').length;
+  sum.innerHTML=issues.length
+    ? `${nf?`<span style="color:var(--danger)">${nf} 个必须修正</span> · `:''}${ne?`<span style="color:var(--danger)">${ne} 个错误</span> · `:''}${nw?`<span style="color:var(--warn)">${nw} 个提示</span>`:''}`.replace(/ · $/,'')
+    : `<span style="color:var(--ok)">✓ 没有问题</span>`;
+  const rank={fatal:0,error:1,warn:2};
+  box.innerHTML=issues.slice().sort((a,b)=>rank[a.severity]-rank[b.severity]).map(i=>
+    `<div class="iss ${i.severity}"><span class="lv">${i.severity==='fatal'?'必修':(i.severity==='error'?'错误':'提示')}</span>
+     <span class="pt">${esc(i.path)}</span><span>${esc(i.message)}</span></div>`).join('');
+}
+async function save(){
+  const r=await fetch('/admin/models/'+encodeURIComponent(CUR.productKey),
+    {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){ showIssues(d.issues||[]); alert(d.error||'保存失败'); return false; }
+  CUR.revision=d.revision; CUR.modelName=d.modelName; CUR.modelVersion=d.modelVersion;
+  $('edTitle').textContent=d.modelName;
+  $('edSub').textContent=`${CUR.productKey} · v${d.modelVersion} · rev${d.revision} · ${CUR.status==='published'?'已发布':'草稿'}`;
+  clearDirty(); showIssues(d.issues||[]);
+  return true;
+}
+$('btnSave').onclick=async()=>{ if(await save()) toast('已保存'); };
+$('btnExport').onclick=async()=>{
+  if(DIRTY&&!await save())return;
+  location.href='/admin/models/'+encodeURIComponent(CUR.productKey)+'/export.jsonc';
+};
+$('btnPublish').onclick=async()=>{
+  if(DIRTY&&!await save())return;
+  if(!confirm('发布后网关和 APP 会按这份配置运行，确认发布？'))return;
+  const r=await fetch('/admin/models/'+encodeURIComponent(CUR.productKey)+'/publish',{method:'POST'});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){ showIssues(d.issues||[]); alert(d.error||'发布失败'); return; }
+  CUR.status='published';
+  $('edSub').textContent=`${CUR.productKey} · v${d.modelVersion} · rev${d.revision} · 已发布`;
+  alert('已发布。'+(d.mqttPushed?'配置变更通知已通过 MQTT 推送。':(d.mqttNote||'')));
+};
+$('btnDelete').onclick=async()=>{
+  const k=CUR.productKey;
+  // 删除不可恢复，让用户手打一遍 productKey 确认
+  const typed=prompt(`删除物模型「${CUR.modelName||k}」不可恢复。\n确认请输入它的 productKey：\n\n${k}`);
+  if(typed===null)return;
+  if(typed.trim()!==k){alert('输入不匹配，已取消');return;}
+  const r=await fetch('/admin/models/'+encodeURIComponent(k),{method:'DELETE'});
+  if(!r.ok){alert(await errText(r));return;}
+  DIRTY=false;                       // 已经删了，别再弹「有未保存改动」
+  $('editView').style.display='none'; $('listView').style.display='block';
+  await loadList(); toast('已删除');
+};
+$('btnRefresh').onclick=async()=>{
+  if(DIRTY&&!await save())return;
+  const r=await fetch('/admin/models/'+encodeURIComponent(CUR.productKey)+'/preview');
+  $('previewBox').textContent=r.ok?await r.text():'预览失败';
+};
+$('btnCopy').onclick=async()=>{
+  try{ await navigator.clipboard.writeText($('previewBox').textContent); toast('已复制'); }
+  catch{ alert('复制失败，请手动选中'); }
+};
+$('btnApplyRaw').onclick=()=>{
+  const err=$('rawErr'); err.textContent='';
+  try{
+    const o=JSON.parse($('rawBox').value);
+    if(typeof o!=='object'||Array.isArray(o))throw new Error('最外层必须是一个对象');
+    CFG=o; markDirty(); renderAll(); toast('已应用到编辑器，记得保存');
+  }catch(ex){ err.textContent='JSON 解析失败：'+ex.message; }
+};
+
+function toast(msg){
+  const d=document.createElement('div');
+  d.textContent=msg;
+  d.style.cssText='position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:var(--ink);color:#fff;'+
+    'padding:11px 22px;border-radius:999px;font-size:14px;z-index:300;box-shadow:0 30px 70px -24px rgba(20,22,28,.5)';
+  document.body.appendChild(d); setTimeout(()=>d.remove(),1800);
+}
+window.addEventListener('beforeunload',e=>{ if(DIRTY){e.preventDefault();e.returnValue='';} });
+
+// ---------- 新建 / 导入 ----------
+$('btnNew').onclick=()=>{$('newErr').textContent='';$('nKey').value=$('nName').value=$('nMfr').value='';$('nVer').value='1.0.0';show('newMask');};
+$('newGo').onclick=async()=>{
+  const err=$('newErr'); err.textContent='';
+  const body={productKey:$('nKey').value.trim(),modelName:$('nName').value.trim(),
+    modelVersion:$('nVer').value.trim(),manufacturer:$('nMfr').value.trim()};
+  if(!body.productKey){err.textContent='请填写 productKey';return;}
+  const r=await fetch('/admin/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){err.textContent=await errText(r);return;}
+  hide('newMask'); await loadList(); openModel(body.productKey);
+};
+$('btnImport').onclick=()=>{$('impErr').textContent='';$('impFile').value='';$('impKey').value='';$('impOw').checked=false;show('impMask');};
+$('impGo').onclick=async()=>{
+  const err=$('impErr'); err.textContent='';
+  const f=$('impFile').files[0];
+  if(!f){err.textContent='请选择文件';return;}
+  const fd=new FormData(); fd.append('file',f);
+  const qs=new URLSearchParams();
+  if($('impKey').value.trim())qs.set('productKey',$('impKey').value.trim());
+  if($('impOw').checked)qs.set('overwrite','true');
+  const r=await fetch('/admin/models/import?'+qs.toString(),{method:'POST',body:fd});
+  if(!r.ok){err.textContent=await errText(r);return;}
+  const d=await r.json();
+  hide('impMask'); await loadList(); openModel(d.productKey);
+};
+
+
+// 平台侧 Topic 配置(用来提示模板是否一致)
+(async()=>{ try{ const r=await fetch('/admin/mqtt-status'); if(r.ok){const d=await r.json(); PLATFORM_TOPICS=d.topics||null;} }catch{} })();
+loadList().catch(()=>{});
+loadMqttPill();
+</script>
+</body>
+</html>

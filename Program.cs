@@ -42,6 +42,12 @@ builder.Services.AddSingleton<DeviceModelCatalog>();
 // 工艺组态上云快照(桌面「上云」上传的 SVG + 实时值,网页 process.html 读取)
 builder.Services.AddSingleton<ProcessStore>();
 
+// ── MQTT 接入(设备接入网关 + 手机APP 那条链路)──
+// 与上面的 DTU 透传完全平行:Mqtt:Enabled=false(默认)时本服务空转,老部署升级零影响。
+builder.Services.AddSingleton(builder.Configuration.GetSection("Mqtt").Get<MqttOptions>() ?? new MqttOptions());
+builder.Services.AddSingleton<MqttGatewayService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttGatewayService>());
+
 // ── 鉴权:Web 看板/后台用 Cookie;开放 API 用 JWT Bearer ──
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(o =>
@@ -136,6 +142,8 @@ app.UseDefaultFiles();
 var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
 contentTypes.Mappings[".glb"] = "model/gltf-binary";
 contentTypes.Mappings[".gltf"] = "model/gltf+json";
+// 物模型示例文件用 .jsonc;未登记扩展名会被静态文件中间件当未知类型直接 404
+contentTypes.Mappings[".jsonc"] = "application/json";
 app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = contentTypes });
 
 // Let's Encrypt (win-acme) HTTP-01 验证:放行 /.well-known/acme-challenge/ 下的明文、无扩展名文件,
@@ -164,6 +172,16 @@ var dashboard = app.Services.GetRequiredService<IHubContext<DashboardHub>>();
 mgr.DeviceOnline += info => { _ = dashboard.Clients.All.SendAsync("DeviceOnline", info); };
 mgr.DeviceOffline += serial => { _ = dashboard.Clients.All.SendAsync("DeviceOffline", serial); };
 
+// MQTT 设备的上下线/数据更新也推到同一个看板 Hub,前端不用区分来源
+var mqttSvc = app.Services.GetRequiredService<MqttGatewayService>();
+mqttSvc.DeviceOnlineChanged += (code, online) =>
+{
+    _ = online
+        ? dashboard.Clients.All.SendAsync("DeviceOnline", new DtuOnlineInfo { Serial = code, ConnectedAt = DateTime.UtcNow, Online = true })
+        : dashboard.Clients.All.SendAsync("DeviceOffline", code);
+};
+mqttSvc.DeviceDataUpdated += code => { _ = dashboard.Clients.All.SendAsync("DeviceData", code); };
+
 mgr.Start(dtuPort, loginTimeout, heartbeatTimeout);
 app.Lifetime.ApplicationStopping.Register(() => mgr.Stop());
 
@@ -173,6 +191,8 @@ app.MapWeb();       // /web/*   浏览器(Cookie)绑定、我的设备
 app.MapAdmin();     // /admin/* 设备管理、二维码、授权(Admin)
 app.MapApiV1();     // /api/v1/* 开放 API(Bearer)
 app.MapProcess(app.Configuration); // /ingest/process/* 桌面上云 + /web/process/* 网页读取
+app.MapModels();       // /admin/models/* 物模型编辑+导出+发布, /api/config/* 网关与APP拉配置
+app.MapMqttDevices();  // /admin/mqtt-devices/* 网关设备管理, /web/* MQTT实时数据与指令
 
 // ── DTU/看板 SignalR(保持不变)──
 app.MapHub<DtuHub>("/dtuhub");

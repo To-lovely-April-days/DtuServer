@@ -482,3 +482,20 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+# 真实配置与密钥，不进版本库
+appsettings.Production.json
+appsettings.Development.json
+appsettings.*.local.json
+*.pfx
+
+# SQLite 运行数据（含用户密码哈希与 API 凭据）
+maxchemic.db
+maxchemic.db-wal
+maxchemic.db-shm
+appsettings.Production.json
+appsettings.Development.json
+*.pfx
+*.db
+*.db-wal
+*.db-shm
+*.bundle

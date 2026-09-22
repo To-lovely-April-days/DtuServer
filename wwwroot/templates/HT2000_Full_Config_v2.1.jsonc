@@ -1,0 +1,419 @@
+// ============================================================
+//
+//  HT-2000 双釜搅拌反应器 — 完整JSON配置规范 V2.1
+//
+//  本文件合并了网关端+APP端全部配置
+//  通信方式: 阿里云消息队列MQTT版
+//
+//  Part A: MQTT通信规范（两端共用）
+//  Part B: 数据契约 dataFields+serviceCommands+alarmEvents（两端共用）
+//  Part C: 网关端专用 — Modbus映射+本地配置
+//  Part D: APP端专用 — meta+display+commands（参考方案）
+//  Part E: MQTT收发完整示例（每种消息都有示例）
+//
+//  网关开发看: A + B + C + E
+//  APP开发看:  A + B + D + E
+//  identifier 是贯穿全文的唯一关联key
+//
+// ============================================================
+{
+
+// ==========================================================
+//  Part A: MQTT通信规范（两端共用）
+// ==========================================================
+
+  "mqtt": {
+    "broker": "mqtt-cn-xxxxx.mqtt.aliyuncs.com",   // 阿里云MQTT实例接入点
+    "port": 1883,                                   // TLS用8883
+    "clientIdPrefix": "GID_DEVICE",                 // 网关: GID_DEVICE@@@{gatewayId}
+    "groupId": "GID_DEVICE",
+    "instanceId": "mqtt-cn-xxxxx",
+    "accessKey": "从服务端动态获取",
+    "secretKey": "从服务端动态获取",
+    "keepAlive": 60,
+    "cleanSession": true
+  },
+
+  "mqttTopics": {
+    "deviceData":    "device/{deviceId}/data",           // 网关发布 / APP订阅
+    "command":       "device/{deviceId}/command",         // APP发布 / 网关订阅
+    "commandReply":  "device/{deviceId}/command/reply",   // 网关发布 / APP订阅
+    "alarm":         "device/{deviceId}/alarm",           // 网关发布 / APP订阅
+    "online":        "device/{deviceId}/online",          // 网关发布 / APP订阅
+    "configUpdate":  "config/update/{productKey}"         // 服务端发布 / 网关+APP订阅
+  },
+
+// ==========================================================
+//  Part B: 数据契约（两端共用，identifier是唯一关联key）
+// ==========================================================
+
+  // ---------- 13个数据字段 ----------
+  "dataFields": [
+    { "identifier": "fuwen1",            "name": "釜温1",       "dataType": "float", "unit": "℃",    "min": 0,   "max": 300,  "step": 0.1,  "required": true },
+    { "identifier": "pressure1",         "name": "釜内压力",    "dataType": "float", "unit": "MPa",   "min": 0,   "max": 5.0,  "step": 0.01, "required": true },
+    { "identifier": "stirSpeed",         "name": "搅拌转速",    "dataType": "int",   "unit": "r/min", "min": 0,   "max": 1500, "step": 1,    "required": false },
+    { "identifier": "stirStatus",        "name": "搅拌状态",    "dataType": "enum",  "options": { "0": "停止", "1": "运行", "2": "故障" } },
+    { "identifier": "liquidLevel",       "name": "液位",        "dataType": "float", "unit": "%",     "min": 0,   "max": 100,  "step": 0.1 },
+    { "identifier": "heaterSwitch",      "name": "加热开关",    "dataType": "bool",  "options": { "0": "关闭", "1": "开启" } },
+    { "identifier": "valve1",            "name": "进料阀",      "dataType": "bool",  "options": { "0": "关闭", "1": "开启" } },
+    { "identifier": "runningFlag",       "name": "运行标志",    "dataType": "bool",  "options": { "0": "停止", "1": "运行" } },
+    { "identifier": "faultFlag",         "name": "故障标志",    "dataType": "bool",  "options": { "0": "正常", "1": "故障" } },
+    { "identifier": "overTempFlag",      "name": "过温标志",    "dataType": "bool",  "options": { "0": "正常", "1": "过温" } },
+    { "identifier": "targetTempReadback","name": "目标温度回读", "dataType": "float", "unit": "℃",    "min": 0,   "max": 300,  "step": 0.1 },
+    { "identifier": "runMode",           "name": "运行模式",    "dataType": "enum",  "options": { "0": "手动模式", "1": "自动模式", "2": "远程模式" } },
+    { "identifier": "firmwareVersion",   "name": "固件版本",    "dataType": "string" }
+  ],
+
+  // ---------- 9个控制指令 ----------
+  "serviceCommands": [
+    {
+      "identifier": "startStir", "name": "启动搅拌",
+      "inputParams": [{ "identifier": "targetSpeed", "name": "目标转速", "dataType": "int", "unit": "r/min", "min": 100, "max": 1500, "step": 10 }],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败-设备离线", "2": "失败-参数超限" } }]
+    },
+    {
+      "identifier": "stopStir", "name": "停止搅拌",
+      "inputParams": [],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "setTargetTemp", "name": "设定目标温度",
+      "inputParams": [{ "identifier": "targetTemp", "name": "目标温度", "dataType": "float", "unit": "℃", "min": 20, "max": 200, "step": 0.5 }],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "emergencyStop", "name": "紧急停机", "sync": true,
+      "inputParams": [],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "setHeater", "name": "加热控制",
+      "inputParams": [{ "identifier": "heaterState", "name": "加热状态", "dataType": "bool", "options": { "0": "关闭", "1": "开启" } }],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "setValve1", "name": "进料阀控制",
+      "inputParams": [{ "identifier": "valveState", "name": "阀门状态", "dataType": "bool", "options": { "0": "关闭", "1": "开启" } }],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "setRunMode", "name": "设置运行模式",
+      "inputParams": [{ "identifier": "mode", "name": "运行模式", "dataType": "enum", "options": { "0": "手动模式", "1": "自动模式", "2": "远程模式" } }],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "applyRecipe", "name": "应用工艺配方",
+      "inputParams": [
+        { "identifier": "targetTemp", "name": "目标温度", "dataType": "float", "unit": "℃", "min": 20, "max": 200, "step": 0.5 },
+        { "identifier": "targetPressure", "name": "目标压力", "dataType": "float", "unit": "MPa", "min": 0, "max": 2.0, "step": 0.01 },
+        { "identifier": "targetSpeed", "name": "目标转速", "dataType": "int", "unit": "r/min", "min": 100, "max": 1500, "step": 10 },
+        { "identifier": "mode", "name": "运行模式", "dataType": "enum", "options": { "0": "手动模式", "1": "自动模式" } }
+      ],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    },
+    {
+      "identifier": "setPidParams", "name": "设置PID参数",
+      "inputParams": [
+        { "identifier": "kp", "name": "比例系数P", "dataType": "float", "min": 0, "max": 999.9, "step": 0.1 },
+        { "identifier": "ki", "name": "积分系数I", "dataType": "float", "min": 0, "max": 999.9, "step": 0.1 },
+        { "identifier": "kd", "name": "微分系数D", "dataType": "float", "min": 0, "max": 999.9, "step": 0.1 }
+      ],
+      "outputParams": [{ "identifier": "result", "name": "执行结果", "dataType": "enum", "options": { "0": "成功", "1": "失败" } }]
+    }
+  ],
+
+  // ---------- 3种告警事件 ----------
+  "alarmEvents": [
+    {
+      "identifier": "tempAlarm", "name": "温度异常报警", "level": "alert",
+      "triggerConditions": { "field": "fuwen1", "warningMax": 120, "dangerMax": 160, "warningMin": 0 },
+      "params": [
+        { "identifier": "alarmType", "name": "报警类型", "dataType": "enum", "options": { "1": "温度过高", "2": "温度过低", "3": "温度传感器故障" } },
+        { "identifier": "currentTemp", "name": "当前温度", "dataType": "float", "unit": "℃" }
+      ]
+    },
+    {
+      "identifier": "pressureAlarm", "name": "压力异常报警", "level": "alert",
+      "triggerConditions": { "field": "pressure1", "warningMax": 0.8, "dangerMax": 1.2 },
+      "params": [
+        { "identifier": "alarmType", "name": "报警类型", "dataType": "enum", "options": { "1": "压力过高", "2": "压力传感器故障" } },
+        { "identifier": "currentPressure", "name": "当前压力", "dataType": "float", "unit": "MPa" }
+      ]
+    },
+    {
+      "identifier": "deviceFault", "name": "设备故障", "level": "error",
+      "params": [
+        { "identifier": "faultCode", "name": "故障代码", "dataType": "int" },
+        { "identifier": "faultMsg", "name": "故障描述", "dataType": "string" }
+      ]
+    }
+  ],
+
+// ==========================================================
+//  Part C: 网关端专用（APP端不需要看）
+// ==========================================================
+
+  "meta": {
+    "productKey": "HT2000",
+    "modelName": "HT-2000 双釜搅拌反应器",
+    "modelVersion": "2.1.0",
+    "icon": "reactor_double",
+    "description": "双釜体液体搅拌混合设备，支持温度、压力、搅拌控制",
+    "manufacturer": "霍桐工厂",
+    "photo": "https://cdn.xxx.com/devices/ht2000.png",
+    "cachePolicy": { "appCacheTTLMs": 86400000, "checkVersionOnLogin": true },
+    "qrCode": { "format": "url", "urlTemplate": "https://app.xxx.com/bind?gw={gatewayId}&pk={productKey}", "fields": ["gatewayId", "productKey"] }
+  },
+
+  "modbus": {
+    "ports": [
+      { "portId": "port1", "interface": "/dev/ttyS1", "protocol": "RTU", "baudRate": 9600, "dataBits": 8, "stopBits": 1, "parity": "none" },
+      { "portId": "port2", "interface": "/dev/ttyS2", "protocol": "RTU", "baudRate": 19200, "dataBits": 8, "stopBits": 1, "parity": "none" },
+      { "portId": "tcp1", "protocol": "TCP", "host": "192.168.1.100", "port": 502, "timeout": 3000 }
+    ],
+    "slaveId": 1,
+    "pollIntervalMs": 1000,
+    "reportMode": "both",
+    "reportIntervalMs": 5000,
+    "changeThreshold": 0.5,
+    "heartbeatIntervalMs": 30000,
+    "offlineTimeoutMs": 90000,
+    "registerMap": [
+      { "identifier": "fuwen1",            "portId": "port1", "address": 40001, "functionCode": 3, "dataType": "int16",  "registerCount": 1, "scale": 0.1,  "offset": 0, "byteOrder": "AB", "slaveId": 1, "retryCount": 3, "failAction": "reportFault" },
+      { "identifier": "pressure1",         "portId": "port1", "address": 40003, "functionCode": 3, "dataType": "int16",  "registerCount": 1, "scale": 0.01, "offset": 0, "byteOrder": "AB", "slaveId": 1, "retryCount": 3, "failAction": "reportFault" },
+      { "identifier": "stirSpeed",         "portId": "port1", "address": 40005, "functionCode": 3, "dataType": "uint16", "registerCount": 1, "scale": 1,    "offset": 0, "byteOrder": "AB", "slaveId": 1, "retryCount": 3, "failAction": "skip" },
+      { "identifier": "stirStatus",        "portId": "port1", "address": 40007, "functionCode": 3, "dataType": "uint16", "registerCount": 1, "scale": 1,    "offset": 0, "byteOrder": "AB", "slaveId": 1, "retryCount": 3, "failAction": "reportFault" },
+      { "identifier": "liquidLevel",       "portId": "port1", "address": 40009, "functionCode": 3, "dataType": "int16",  "registerCount": 1, "scale": 0.1,  "offset": 0, "byteOrder": "AB", "slaveId": 2, "retryCount": 3, "failAction": "skip" },
+      { "identifier": "targetTempReadback","portId": "port1", "address": 40011, "functionCode": 3, "dataType": "int16",  "registerCount": 1, "scale": 0.1,  "offset": 0, "byteOrder": "AB", "slaveId": 1, "retryCount": 3, "failAction": "skip" },
+      { "identifier": "heaterSwitch",      "portId": "port1", "address": 1,     "functionCode": 1, "dataType": "bit",    "registerCount": 1, "scale": 1,    "offset": 0, "slaveId": 1, "retryCount": 3, "failAction": "skip" },
+      { "identifier": "valve1",            "portId": "port1", "address": 2,     "functionCode": 1, "dataType": "bit",    "registerCount": 1, "scale": 1,    "offset": 0, "slaveId": 1, "retryCount": 3, "failAction": "skip" },
+      { "identifier": "runningFlag",       "portId": "port1", "address": 40050, "functionCode": 3, "dataType": "bit", "bitIndex": 0, "registerCount": 1, "scale": 1, "offset": 0, "slaveId": 1, "retryCount": 3, "failAction": "reportFault" },
+      { "identifier": "faultFlag",         "portId": "port1", "address": 40050, "functionCode": 3, "dataType": "bit", "bitIndex": 1, "registerCount": 1, "scale": 1, "offset": 0, "slaveId": 1, "retryCount": 3, "failAction": "reportFault" },
+      { "identifier": "overTempFlag",      "portId": "port1", "address": 40050, "functionCode": 3, "dataType": "bit", "bitIndex": 2, "registerCount": 1, "scale": 1, "offset": 0, "slaveId": 1, "retryCount": 3, "failAction": "reportFault" },
+      { "identifier": "runMode",           "portId": "port1", "address": 40051, "functionCode": 3, "dataType": "uint16", "registerCount": 1, "scale": 1, "offset": 0, "byteOrder": "AB", "slaveId": 1, "retryCount": 3, "failAction": "skip" },
+      { "identifier": "firmwareVersion",   "portId": "port1", "address": 40300, "functionCode": 3, "dataType": "string", "registerCount": 8, "encoding": "ascii", "slaveId": 1, "retryCount": 3, "failAction": "skip" }
+    ],
+    "writeMap": [
+      { "serviceIdentifier": "startStir",     "writes": [{ "portId": "port1", "address": 40101, "functionCode": 6, "value": 1, "slaveId": 1, "comment": "写1=启动" }, { "portId": "port1", "inputIdentifier": "targetSpeed", "address": 40102, "functionCode": 6, "valueFrom": "input", "scale": 1, "slaveId": 1, "comment": "写入目标转速" }] },
+      { "serviceIdentifier": "stopStir",      "writes": [{ "portId": "port1", "address": 40101, "functionCode": 6, "value": 0, "slaveId": 1, "comment": "写0=停止" }] },
+      { "serviceIdentifier": "setTargetTemp", "writes": [{ "portId": "port1", "inputIdentifier": "targetTemp", "address": 40103, "functionCode": 6, "valueFrom": "input", "scale": 10, "slaveId": 1, "comment": "80度写入800" }] },
+      { "serviceIdentifier": "emergencyStop", "writes": [{ "portId": "port1", "address": 40100, "functionCode": 6, "value": 0, "slaveId": 1, "comment": "总控写0=紧急停机" }] },
+      { "serviceIdentifier": "setHeater",     "writes": [{ "portId": "port1", "inputIdentifier": "heaterState", "address": 1, "functionCode": 5, "valueFrom": "input", "slaveId": 1, "comment": "线圈ON/OFF" }] },
+      { "serviceIdentifier": "setValve1",     "writes": [{ "portId": "port1", "inputIdentifier": "valveState", "address": 2, "functionCode": 5, "valueFrom": "input", "slaveId": 1, "comment": "线圈ON/OFF" }] },
+      { "serviceIdentifier": "setRunMode",    "writes": [{ "portId": "port1", "inputIdentifier": "mode", "address": 40051, "functionCode": 6, "valueFrom": "input", "scale": 1, "slaveId": 1, "comment": "0手动1自动2远程" }] },
+      { "serviceIdentifier": "applyRecipe",   "writes": [{ "portId": "port1", "inputIdentifier": "targetTemp", "address": 40103, "functionCode": 6, "valueFrom": "input", "scale": 10, "slaveId": 1 }, { "portId": "port1", "inputIdentifier": "targetPressure", "address": 40104, "functionCode": 6, "valueFrom": "input", "scale": 100, "slaveId": 1 }, { "portId": "port1", "inputIdentifier": "targetSpeed", "address": 40102, "functionCode": 6, "valueFrom": "input", "scale": 1, "slaveId": 1 }, { "portId": "port1", "inputIdentifier": "mode", "address": 40051, "functionCode": 6, "valueFrom": "input", "scale": 1, "slaveId": 1 }] },
+      { "serviceIdentifier": "setPidParams",  "writes": [{ "portId": "port1", "address": 40200, "functionCode": 16, "registerCount": 3, "inputIdentifiers": ["kp", "ki", "kd"], "scale": 10, "slaveId": 1, "comment": "FC16批量写P/I/D" }] }
+    ]
+  },
+
+  "gateway": {
+    "localCache": { "storage": "flash", "maxBufferSize": 10000, "maxBufferSizeMB": 10, "batchUploadSize": 50 },
+    "reconnect": { "initialDelayMs": 10000, "maxDelayMs": 300000, "backoffMultiplier": 2 }
+  },
+
+// ==========================================================
+//  Part D: APP端专用 — UI配置（参考方案，APP团队可调整）
+//  identifier必须与Part B一致，控件类型和布局可以改
+//  网关端不需要看这部分
+// ==========================================================
+
+  "display": {
+    "groups": [
+      { "groupId": "temp", "groupName": "温度数据", "sortOrder": 1, "fields": [
+        { "identifier": "fuwen1", "displayName": "1号釜温", "widgetType": "pvSvGauge", "config": { "min": 0, "max": 200, "decimal": 1, "pvIdentifier": "fuwen1", "svIdentifier": "targetTempReadback", "pvLabel": "实际温度", "svLabel": "设定温度", "zones": [{ "min": 0, "max": 60, "color": "#3B8BD4", "label": "低温" }, { "min": 60, "max": 120, "color": "#639922", "label": "正常" }, { "min": 120, "max": 160, "color": "#EF9F27", "label": "偏高" }, { "min": 160, "max": 200, "color": "#E24B4A", "label": "危险" }] }, "alarm": { "warningMax": 120, "dangerMax": 160, "message": "釜温超出安全范围" }, "showTimestamp": true, "staleTimeoutMs": 30000 }
+      ] },
+      { "groupId": "pressure", "groupName": "压力数据", "sortOrder": 2, "fields": [
+        { "identifier": "pressure1", "displayName": "釜内压力", "widgetType": "number", "config": { "decimal": 2, "suffix": "MPa", "fontSize": "large", "zones": [{ "min": 0, "max": 0.8, "color": "#639922" }, { "min": 0.8, "max": 1.2, "color": "#EF9F27" }, { "min": 1.2, "max": 5.0, "color": "#E24B4A" }] }, "alarm": { "warningMax": 0.8, "dangerMax": 1.2, "message": "压力超限" }, "showTimestamp": true, "staleTimeoutMs": 30000 }
+      ] },
+      { "groupId": "stir", "groupName": "搅拌数据", "sortOrder": 3, "fields": [
+        { "identifier": "stirSpeed", "displayName": "当前转速", "widgetType": "number", "config": { "decimal": 0, "suffix": "r/min", "fontSize": "large" }, "showTimestamp": true, "staleTimeoutMs": 30000 },
+        { "identifier": "stirStatus", "displayName": "搅拌状态", "widgetType": "statusLight", "config": { "mapping": { "0": { "label": "停止", "color": "#888780" }, "1": { "label": "运行", "color": "#639922" }, "2": { "label": "故障", "color": "#E24B4A" } } }, "showTimestamp": false, "staleTimeoutMs": 30000 },
+        { "identifier": "liquidLevel", "displayName": "液位", "widgetType": "progressBar", "config": { "min": 0, "max": 100, "suffix": "%", "zones": [{ "min": 0, "max": 20, "color": "#E24B4A" }, { "min": 20, "max": 80, "color": "#639922" }, { "min": 80, "max": 100, "color": "#EF9F27" }] }, "showTimestamp": true, "staleTimeoutMs": 30000 }
+      ] },
+      { "groupId": "switches", "groupName": "开关控制", "sortOrder": 4, "fields": [
+        { "identifier": "heaterSwitch", "displayName": "加热开关", "widgetType": "switch", "config": { "onLabel": "加热中", "offLabel": "已关闭", "onColor": "#E24B4A", "offColor": "#888780", "serviceIdentifier": "setHeater", "inputIdentifier": "heaterState", "confirmRequired": true, "confirmMessage": "确认切换加热状态？" }, "requiredPermission": "control", "showTimestamp": false, "staleTimeoutMs": 30000 },
+        { "identifier": "valve1", "displayName": "进料阀", "widgetType": "switch", "config": { "onLabel": "已开启", "offLabel": "已关闭", "onColor": "#639922", "offColor": "#888780", "serviceIdentifier": "setValve1", "inputIdentifier": "valveState", "confirmRequired": true, "confirmMessage": "确认切换进料阀？" }, "requiredPermission": "control", "showTimestamp": false, "staleTimeoutMs": 30000 }
+      ] },
+      { "groupId": "flags", "groupName": "设备状态", "sortOrder": 5, "fields": [
+        { "identifier": "_flags_table", "displayName": "状态一览", "widgetType": "table", "config": { "columns": ["状态项", "当前值"], "rows": [
+          { "identifier": "runningFlag", "label": "运行标志", "displayType": "statusLight", "mapping": { "0": { "label": "停止", "color": "#888780" }, "1": { "label": "运行", "color": "#639922" } } },
+          { "identifier": "faultFlag", "label": "故障标志", "displayType": "statusLight", "mapping": { "0": { "label": "正常", "color": "#639922" }, "1": { "label": "故障", "color": "#E24B4A" } } },
+          { "identifier": "overTempFlag", "label": "过温标志", "displayType": "statusLight", "mapping": { "0": { "label": "正常", "color": "#639922" }, "1": { "label": "过温", "color": "#E24B4A" } } },
+          { "identifier": "runMode", "label": "运行模式", "displayType": "text" }
+        ] }, "showTimestamp": false, "staleTimeoutMs": 30000 }
+      ] },
+      { "groupId": "deviceInfo", "groupName": "设备信息", "sortOrder": 99, "fields": [
+        { "identifier": "firmwareVersion", "displayName": "固件版本", "widgetType": "text", "config": {}, "showTimestamp": false, "staleTimeoutMs": null }
+      ] }
+    ],
+    "historyChart": { "defaultRange": "24h", "fields": ["fuwen1", "pressure1", "stirSpeed", "liquidLevel"], "chartType": "line", "enableExport": true }
+  },
+
+  "commands": {
+    "groups": [
+      { "groupId": "stir_control", "groupName": "搅拌控制", "sortOrder": 1, "items": [
+        { "serviceIdentifier": "startStir", "displayName": "启动搅拌", "widgetType": "button", "config": { "style": "primary", "icon": "play", "confirmRequired": true, "confirmMessage": "确认启动搅拌？" }, "inputFields": [{ "identifier": "targetSpeed", "widgetType": "slider", "config": { "min": 100, "max": 1500, "step": 10, "defaultValue": 500, "suffix": "r/min", "showInput": true } }], "disableWhen": { "field": "stirStatus", "operator": "eq", "value": 1, "tip": "设备已在运行中" }, "feedbackConfig": { "pendingText": "指令发送中...", "successText": "启动成功", "successDurationMs": 3000, "failText": "启动失败", "showFailReason": true }, "requiredPermission": "control" },
+        { "serviceIdentifier": "stopStir", "displayName": "停止搅拌", "widgetType": "button", "config": { "style": "default", "icon": "stop", "confirmRequired": true, "confirmMessage": "确认停止搅拌？" }, "inputFields": [], "disableWhen": { "field": "stirStatus", "operator": "eq", "value": 0, "tip": "设备未在运行" }, "feedbackConfig": { "pendingText": "指令发送中...", "successText": "已停止", "successDurationMs": 3000, "failText": "停止失败", "showFailReason": true }, "requiredPermission": "control" }
+      ] },
+      { "groupId": "temp_control", "groupName": "温度控制", "sortOrder": 2, "items": [
+        { "serviceIdentifier": "setTargetTemp", "displayName": "设定目标温度", "widgetType": "inputWithButton", "config": { "style": "primary", "icon": "thermometer", "confirmRequired": true, "confirmMessage": "确认设定目标温度？" }, "inputFields": [{ "identifier": "targetTemp", "widgetType": "numberInput", "config": { "min": 20, "max": 200, "step": 0.5, "defaultValue": 80, "suffix": "℃", "placeholder": "输入目标温度" } }], "disableWhen": null, "feedbackConfig": { "pendingText": "设定中...", "successText": "设定成功", "successDurationMs": 3000, "failText": "设定失败", "showFailReason": true }, "requiredPermission": "control" }
+      ] },
+      { "groupId": "mode_control", "groupName": "模式设置", "sortOrder": 3, "items": [
+        { "serviceIdentifier": "setRunMode", "displayName": "运行模式", "widgetType": "button", "config": { "style": "primary", "icon": "settings", "confirmRequired": true, "confirmMessage": "确认切换运行模式？" }, "inputFields": [{ "identifier": "mode", "widgetType": "select", "config": { "options": [{ "value": 0, "label": "手动模式" }, { "value": 1, "label": "自动模式" }, { "value": 2, "label": "远程模式" }], "defaultValue": 0 } }], "disableWhen": null, "feedbackConfig": { "pendingText": "切换中...", "successText": "切换成功", "successDurationMs": 3000, "failText": "切换失败", "showFailReason": true }, "requiredPermission": "control" }
+      ] },
+      { "groupId": "valve_heater", "groupName": "阀门与加热", "sortOrder": 4, "items": [
+        { "serviceIdentifier": "setHeater", "displayName": "加热控制", "widgetType": "button", "config": { "style": "default", "icon": "flame", "confirmRequired": true, "confirmMessage": "确认切换加热状态？" }, "inputFields": [{ "identifier": "heaterState", "widgetType": "select", "config": { "options": [{ "value": 0, "label": "关闭" }, { "value": 1, "label": "开启" }], "defaultValue": 0 } }], "disableWhen": null, "feedbackConfig": { "pendingText": "切换中...", "successText": "切换成功", "successDurationMs": 3000, "failText": "切换失败", "showFailReason": true }, "requiredPermission": "control" },
+        { "serviceIdentifier": "setValve1", "displayName": "进料阀控制", "widgetType": "button", "config": { "style": "default", "icon": "droplet", "confirmRequired": true, "confirmMessage": "确认切换进料阀？" }, "inputFields": [{ "identifier": "valveState", "widgetType": "select", "config": { "options": [{ "value": 0, "label": "关闭" }, { "value": 1, "label": "开启" }], "defaultValue": 0 } }], "disableWhen": null, "feedbackConfig": { "pendingText": "切换中...", "successText": "切换成功", "successDurationMs": 3000, "failText": "切换失败", "showFailReason": true }, "requiredPermission": "control" }
+      ] },
+      { "groupId": "recipe", "groupName": "工艺配方", "sortOrder": 5, "items": [
+        { "serviceIdentifier": "applyRecipe", "displayName": "应用配方", "widgetType": "form", "config": { "style": "primary", "icon": "clipboard-list", "submitText": "应用配方", "confirmRequired": true, "confirmMessage": "确认应用此工艺配方？" }, "inputFields": [{ "identifier": "targetTemp", "label": "目标温度", "widgetType": "numberInput", "config": { "min": 20, "max": 200, "step": 0.5, "defaultValue": 80, "suffix": "℃" } }, { "identifier": "targetPressure", "label": "目标压力", "widgetType": "numberInput", "config": { "min": 0, "max": 2.0, "step": 0.01, "defaultValue": 0.5, "suffix": "MPa" } }, { "identifier": "targetSpeed", "label": "目标转速", "widgetType": "slider", "config": { "min": 100, "max": 1500, "step": 10, "defaultValue": 500, "suffix": "r/min", "showInput": true } }, { "identifier": "mode", "label": "运行模式", "widgetType": "select", "config": { "options": [{ "value": 0, "label": "手动" }, { "value": 1, "label": "自动" }], "defaultValue": 1 } }], "disableWhen": null, "feedbackConfig": { "pendingText": "配方下发中...", "successText": "配方已应用", "successDurationMs": 5000, "failText": "配方下发失败", "showFailReason": true }, "requiredPermission": "control" }
+      ] },
+      { "groupId": "pid_setting", "groupName": "PID参数", "sortOrder": 6, "items": [
+        { "serviceIdentifier": "setPidParams", "displayName": "设置PID参数", "widgetType": "form", "config": { "style": "default", "icon": "sliders", "submitText": "写入PID", "confirmRequired": true, "confirmMessage": "确认写入PID参数？" }, "inputFields": [{ "identifier": "kp", "label": "P (比例)", "widgetType": "numberInput", "config": { "min": 0, "max": 999.9, "step": 0.1, "defaultValue": 10.0 } }, { "identifier": "ki", "label": "I (积分)", "widgetType": "numberInput", "config": { "min": 0, "max": 999.9, "step": 0.1, "defaultValue": 5.0 } }, { "identifier": "kd", "label": "D (微分)", "widgetType": "numberInput", "config": { "min": 0, "max": 999.9, "step": 0.1, "defaultValue": 1.0 } }], "disableWhen": null, "feedbackConfig": { "pendingText": "写入中...", "successText": "PID参数已更新", "successDurationMs": 3000, "failText": "写入失败", "showFailReason": true }, "requiredPermission": "control" }
+      ] },
+      { "groupId": "emergency", "groupName": "紧急操作", "sortOrder": 99, "items": [
+        { "serviceIdentifier": "emergencyStop", "displayName": "紧急停机", "widgetType": "button", "config": { "style": "danger", "icon": "alert-octagon", "size": "large", "confirmRequired": true, "confirmMessage": "确认紧急停机？所有操作将立即终止！" }, "inputFields": [], "disableWhen": null, "feedbackConfig": { "pendingText": "停机指令发送中...", "successText": "已紧急停机", "successDurationMs": 5000, "failText": "停机失败！请立即现场处理！", "showFailReason": true }, "requiredPermission": "control" }
+      ] }
+    ]
+  },
+
+// ==========================================================
+//  Part E: MQTT收发完整示例
+//  网关看"网关发布"和"网关收到"
+//  APP看"APP收到"和"APP发布"
+// ==========================================================
+
+  // ----- 1. 网关发布 / APP收到: 设备实时数据 -----
+  "mqttExample_data": {
+    "_网关": "采集Modbus→转换→组装→发布到此Topic",
+    "_APP": "订阅此Topic→用identifier匹配display控件→渲染",
+    "topic": "device/GW-A001/data",
+    "payload": {
+      "deviceId": "GW-A001",
+      "productKey": "HT2000",
+      "timestamp": 1712736000000,
+      "data": {
+        "fuwen1": 78.5,
+        "pressure1": 0.32,
+        "stirSpeed": 500,
+        "stirStatus": 1,
+        "liquidLevel": 65.0,
+        "heaterSwitch": 1,
+        "valve1": 0,
+        "runningFlag": 1,
+        "faultFlag": 0,
+        "overTempFlag": 0,
+        "targetTempReadback": 80.0,
+        "runMode": 1,
+        "firmwareVersion": "V2.1.3"
+      }
+    }
+  },
+
+  // ----- 2. 网关发布 / APP收到: 上线通知 -----
+  "mqttExample_online": {
+    "topic": "device/GW-A001/online",
+    "payload": { "deviceId": "GW-A001", "productKey": "HT2000", "timestamp": 1712736000000, "status": "online", "firmwareVersion": "V2.1.3" }
+  },
+
+  // ----- 3. APP发布 / 网关收到: 启动搅拌 -----
+  "mqttExample_cmd_startStir": {
+    "_APP发布": "用户拖滑块到800→点启动搅拌→发布到command Topic",
+    "_网关收到": "匹配writeMap→writes[0]:FC6写40101=1(启动)→writes[1]:FC6写40102=800(转速)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_001", "deviceId": "GW-A001", "command": "startStir", "params": { "targetSpeed": 800 } }
+  },
+
+  // ----- 4. APP发布 / 网关收到: 停止搅拌 -----
+  "mqttExample_cmd_stopStir": {
+    "_网关收到": "匹配writeMap→FC6写40101=0(停止)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_002", "deviceId": "GW-A001", "command": "stopStir", "params": {} }
+  },
+
+  // ----- 5. APP发布 / 网关收到: 设定目标温度 -----
+  "mqttExample_cmd_setTargetTemp": {
+    "_网关收到": "匹配writeMap→targetTemp=85.0×scale(10)→FC6写40103=850",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_003", "deviceId": "GW-A001", "command": "setTargetTemp", "params": { "targetTemp": 85.0 } }
+  },
+
+  // ----- 6. APP发布 / 网关收到: 紧急停机 -----
+  "mqttExample_cmd_emergencyStop": {
+    "_网关收到": "匹配writeMap→FC6写40100=0(总控停机)→必须立即回复(sync)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_004", "deviceId": "GW-A001", "command": "emergencyStop", "params": {} }
+  },
+
+  // ----- 7. APP发布 / 网关收到: 加热控制 -----
+  "mqttExample_cmd_setHeater": {
+    "_网关收到": "匹配writeMap→FC5写线圈地址1, heaterState=1→ON(0xFF00)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_005", "deviceId": "GW-A001", "command": "setHeater", "params": { "heaterState": 1 } }
+  },
+
+  // ----- 8. APP发布 / 网关收到: 进料阀控制 -----
+  "mqttExample_cmd_setValve1": {
+    "_网关收到": "匹配writeMap→FC5写线圈地址2, valveState=0→OFF(0x0000)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_006", "deviceId": "GW-A001", "command": "setValve1", "params": { "valveState": 0 } }
+  },
+
+  // ----- 9. APP发布 / 网关收到: 设置运行模式 -----
+  "mqttExample_cmd_setRunMode": {
+    "_网关收到": "匹配writeMap→FC6写40051=2(远程模式)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_007", "deviceId": "GW-A001", "command": "setRunMode", "params": { "mode": 2 } }
+  },
+
+  // ----- 10. APP发布 / 网关收到: 应用工艺配方（多参数） -----
+  "mqttExample_cmd_applyRecipe": {
+    "_网关收到": "匹配writeMap→按writes[]逐条执行: 40103=850(温度×10), 40104=60(压力×100), 40102=600(转速), 40051=1(模式)",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_008", "deviceId": "GW-A001", "command": "applyRecipe", "params": { "targetTemp": 85.0, "targetPressure": 0.6, "targetSpeed": 600, "mode": 1 } }
+  },
+
+  // ----- 11. APP发布 / 网关收到: 设置PID参数 -----
+  "mqttExample_cmd_setPidParams": {
+    "_网关收到": "匹配writeMap→FC16批量写: kp=12.5×10=125→40200, ki=3.2×10=32→40201, kd=0.8×10=8→40202",
+    "topic": "device/GW-A001/command",
+    "payload": { "commandId": "cmd_009", "deviceId": "GW-A001", "command": "setPidParams", "params": { "kp": 12.5, "ki": 3.2, "kd": 0.8 } }
+  },
+
+  // ----- 12. 网关发布 / APP收到: 指令执行成功 -----
+  "mqttExample_reply_success": {
+    "_网关": "Modbus写操作成功→发布到commandReply Topic",
+    "_APP": "收到后显示feedbackConfig.successText",
+    "topic": "device/GW-A001/command/reply",
+    "payload": { "commandId": "cmd_001", "deviceId": "GW-A001", "command": "startStir", "result": 0, "message": "" }
+  },
+
+  // ----- 13. 网关发布 / APP收到: 指令执行失败 -----
+  "mqttExample_reply_fail": {
+    "_网关": "Modbus写操作失败（从站无响应）→发布失败回复",
+    "_APP": "收到后显示feedbackConfig.failText + message内容",
+    "topic": "device/GW-A001/command/reply",
+    "payload": { "commandId": "cmd_001", "deviceId": "GW-A001", "command": "startStir", "result": 1, "message": "Modbus从站无响应，设备可能离线" }
+  },
+
+  // ----- 14. 网关发布 / APP收到: 温度告警 -----
+  "mqttExample_alarm_temp": {
+    "_网关": "检测到fuwen1=135.2>warningMax(120)→发布告警",
+    "_APP": "弹出告警通知，显示alarmType对应的文字",
+    "topic": "device/GW-A001/alarm",
+    "payload": { "deviceId": "GW-A001", "timestamp": 1712736060000, "event": "tempAlarm", "level": "alert", "params": { "alarmType": 1, "currentTemp": 135.2 } }
+  },
+
+  // ----- 15. 网关发布 / APP收到: 压力告警 -----
+  "mqttExample_alarm_pressure": {
+    "topic": "device/GW-A001/alarm",
+    "payload": { "deviceId": "GW-A001", "timestamp": 1712736120000, "event": "pressureAlarm", "level": "error", "params": { "alarmType": 1, "currentPressure": 1.35 } }
+  },
+
+  // ----- 16. 网关发布 / APP收到: 设备故障 -----
+  "mqttExample_alarm_fault": {
+    "topic": "device/GW-A001/alarm",
+    "payload": { "deviceId": "GW-A001", "timestamp": 1712736180000, "event": "deviceFault", "level": "error", "params": { "faultCode": 1001, "faultMsg": "Modbus从站1连续3次读取超时" } }
+  }
+
+}

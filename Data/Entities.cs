@@ -25,12 +25,31 @@ namespace MaxChemical.DtuServer.Data
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>设备接入方式。两条链路并存,互不影响。</summary>
+    public static class AccessModes
+    {
+        /// <summary>透传模式(原有链路):DTU 用登录包(序列号)连 TCP,服务端只做字节透传+帧组装,
+        /// 桌面端经 SignalR /dtuhub 中转,网页按内置型号档案(IDeviceProfile)读写。老设备默认走这条。</summary>
+        public const string Passthrough = "Passthrough";
+
+        /// <summary>MQTT 模式(新增链路):设备接入网关自己跑 Modbus 并经 MQTT 上报,
+        /// 平台按物模型(ProductModel)解析数据、下发指令,APP 按同一份物模型动态渲染。</summary>
+        public const string Mqtt = "Mqtt";
+
+        public static bool IsMqtt(string? mode) =>
+            string.Equals(mode, Mqtt, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>归一化:空/未知一律当作透传,保证老数据行为不变。</summary>
+        public static string Normalize(string? mode) => IsMqtt(mode) ? Mqtt : Passthrough;
+    }
+
     /// <summary>逻辑设备。一台设备 = 一个对外标识码 + 后端(DTU序列号 + Modbus站号 + 设备类型)。</summary>
     public class Device
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
-        /// <summary>对外设备标识码(贴在设备上的二维码内容),如 MX-7K3Q-9F2A。</summary>
+        /// <summary>对外设备标识码(贴在设备上的二维码内容),如 MX-7K3Q-9F2A。
+        /// MQTT 模式下它同时就是 MQTT Topic 里的 {deviceId}。</summary>
         public string Code { get; set; } = "";
 
         public string Name { get; set; } = "";
@@ -43,6 +62,12 @@ namespace MaxChemical.DtuServer.Data
 
         /// <summary>RS485 总线上的 Modbus 站号。</summary>
         public int ModbusStation { get; set; } = 1;
+
+        /// <summary>接入方式:Passthrough(透传,默认) / Mqtt。见 <see cref="AccessModes"/>。</summary>
+        public string AccessMode { get; set; } = AccessModes.Passthrough;
+
+        /// <summary>MQTT 模式下所属物模型的 ProductKey(如 HT2000);透传模式为空。</summary>
+        public string? ProductKey { get; set; }
 
         public string CreatedByUserId { get; set; } = "";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

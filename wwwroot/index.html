@@ -7,83 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css" />
 <style>
-  :root{
-    --accent:#A41626;--ink:#14161c;--text-2:#4a525e;--text-3:#8b919b;
-    --line:#e5e7eb;--line-2:#f0f1f3;--bg-soft:#f3f4f6;--bg-head:#f8f9fa;--ok:#1f7a4d;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  html,body{height:100%;}
-  body{font-family:'Public Sans','Noto Sans SC',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-  .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;}
-
-  .topbar{position:relative;height:56px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid var(--line);background:#fff;}
-  .topbar::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
-    background-image:linear-gradient(rgba(20,20,30,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(20,20,30,.03) 1px,transparent 1px);
-    background-size:34px 34px;-webkit-mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent);mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent);}
-  .brand{position:relative;display:flex;align-items:center;gap:11px;}
-  .logo{height:42px;display:flex;align-items:center;justify-content:center;}
-  .logo img{height:42px;width:auto;display:block;}
-  .brand-name{font-size:15px;font-weight:700;letter-spacing:.06em;}
-  .brand-badge{font-size:9.5px;letter-spacing:.18em;color:var(--text-3);border:1px solid #dcdde1;border-radius:4px;padding:3px 7px;}
-  .chev{color:var(--text-3);}
-  .top-right{position:relative;display:flex;align-items:center;gap:18px;color:var(--text-3);}
-  .top-right svg{cursor:pointer;}
-  .avatar{position:relative;width:26px;height:26px;border-radius:50%;background:#eef0f3;display:flex;align-items:center;justify-content:center;color:#aeb4bd;cursor:pointer;}
-  .avatar .dot{position:absolute;right:-1px;bottom:-1px;width:8px;height:8px;border-radius:50%;background:var(--ok);border:1.6px solid #fff;}
-
-  .shell{display:flex;flex:1;min-height:0;}
-  .sidebar{width:226px;flex-shrink:0;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:3px;transition:width .2s ease;overflow:hidden;}
   .sidebar.collapsed{width:64px;}
-  .nav-eyebrow{font-size:10px;letter-spacing:.18em;color:var(--text-3);font-weight:600;padding:6px 13px 8px;white-space:nowrap;}
   .sidebar.collapsed .nav-eyebrow{opacity:0;height:0;padding:0;overflow:hidden;}
-  .side-item{position:relative;display:flex;align-items:center;gap:13px;height:42px;padding:0 12px;border-radius:9px;color:var(--text-2);cursor:pointer;transition:background .14s,color .14s;white-space:nowrap;}
-  .side-item:hover{background:var(--line-2);color:var(--ink);}
-  .side-ico-box{flex:0 0 20px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
-  .side-label{font-size:13.5px;font-weight:500;}
-  .side-item.active{background:var(--bg-soft);color:var(--ink);}
-  .side-item.active::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--accent);}
-  .side-item.active .side-ico-box{color:var(--accent);}
-  .side-spacer{flex:1;}
-  .side-divider{height:1px;background:var(--line);margin:6px 12px;}
-  .sidebar.collapsed .side-divider{margin:6px 8px;}
-  .sidebar.collapsed .side-item{padding:0;justify-content:center;}
-  .sidebar.collapsed .side-label{opacity:0;width:0;overflow:hidden;}
-  .sidebar.collapsed .side-item.active::before{display:none;}
-  .side-toggle{color:var(--text-3);}
-  .side-toggle:hover{color:var(--ink);}
-  .side-toggle .tg{transition:transform .2s ease;}
-  .sidebar.collapsed .side-toggle .tg{transform:rotate(180deg);}
-
-  .content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative;}
-  .content-scroll{flex:1;overflow:auto;padding:26px 30px 0;}
   /* 工艺组态 iframe:覆盖内容区,用 visibility 切换(不用 display:none,否则 iframe 脚本会被推迟不执行)*/
   .topo-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#f6f7f9;visibility:hidden;z-index:6;}
   .topo-frame.show{visibility:visible;}
-  .content-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
-  .kicker{font-size:11px;letter-spacing:.22em;color:var(--accent);font-weight:500;margin-bottom:9px;}
-  .title{font-size:24px;font-weight:700;letter-spacing:-.01em;}
-  .subtitle{font-size:13px;color:var(--text-3);margin-top:5px;}
-  .btn-new{display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;white-space:nowrap;box-shadow:0 1px 2px rgba(164,22,38,.22);transition:filter .15s,transform .05s;}
-  .btn-new:hover{filter:brightness(1.08);}
-  .btn-new:active{transform:translateY(1px);}
-
-  .toolbar{margin-top:22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
-  .search{width:320px;max-width:100%;display:flex;align-items:center;gap:9px;border:1px solid #d7dae0;border-radius:8px;padding:10px 14px;color:var(--text-3);transition:border-color .15s,box-shadow .15s;}
-  .search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent);}
-  .search input{border:none;outline:none;flex:1;font:inherit;font-size:13.5px;color:var(--ink);background:transparent;}
-  .search input::placeholder{color:#aab1bd;}
-  .tool-actions{display:flex;align-items:center;gap:10px;}
-  .ghost-btn{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7dae0;background:#fff;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;}
-  .ghost-btn:hover{background:var(--bg-head);color:var(--ink);border-color:#c2c6cd;}
-
-  .row-tabs{margin-top:22px;display:flex;align-items:flex-end;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);}
-  .tabs{display:flex;align-items:center;gap:24px;}
-  .tab{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-3);font-weight:500;cursor:pointer;padding-bottom:12px;border-bottom:2px solid transparent;margin-bottom:-1px;}
-  .tab:hover{color:var(--text-2);}
-  .tab.active{color:var(--ink);border-bottom-color:var(--accent);}
-  .tab .count{font-size:12px;font-weight:600;color:var(--text-2);background:var(--bg-soft);border-radius:5px;padding:1px 7px;}
   .views{display:inline-flex;align-items:center;gap:8px;padding-bottom:8px;}
   .seg{display:inline-flex;background:var(--bg-soft);border-radius:8px;padding:3px;gap:2px;}
   .seg-btn{width:32px;height:28px;border:none;background:transparent;border-radius:6px;color:var(--text-3);display:flex;align-items:center;justify-content:center;cursor:pointer;}
@@ -132,21 +62,11 @@
   .dev-text{min-width:0;}
   .dev-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .dev-code{font-size:11px;color:var(--text-3);margin-top:2px;letter-spacing:.02em;}
-  .status{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:500;}
-  .status .d{width:7px;height:7px;border-radius:50%;}
-  .status.on{color:#2b3038;}
-  .status.on .d{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 14%,transparent);}
-  .status.off{color:var(--text-3);}
-  .status.off .d{background:#b4b9c0;}
   .temp{font-size:13.5px;color:var(--ink);}
   .temp.dim{color:var(--text-3);}
   .kebab{display:flex;align-items:center;justify-content:center;color:var(--text-3);cursor:pointer;opacity:0;transition:.12s;}
   .t-row:hover .kebab{opacity:1;}
-  .rowgo{font-size:13px;font-weight:500;color:var(--accent);display:inline-flex;align-items:center;gap:4px;}
   .dtype{color:var(--text-2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .empty{padding:60px 0;text-align:center;color:var(--text-3);font-size:14px;}
-
-  .footer{flex-shrink:0;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:14px 30px;font-size:13px;color:var(--text-2);background:#fff;}
   .rows-sel{display:flex;align-items:center;gap:8px;}
   .rows-sel select{font:inherit;font-size:13px;border:1px solid #d7dae0;border-radius:8px;padding:5px 8px;color:var(--ink);background:#fff;cursor:pointer;}
   .pager{display:flex;align-items:center;gap:4px;}
@@ -159,7 +79,6 @@
   .ac-img{width:36px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--line);background:#f3f4f6;}
 
   /* 添加设备弹窗 */
-  .mask{position:fixed;inset:0;background:rgba(20,22,28,.45);display:none;align-items:center;justify-content:center;z-index:200;}
   /* 设备控制弹框:深色背景 + 居中嵌入操作面板 */
   .ctrl-mask{background:rgba(8,9,12,.72);backdrop-filter:blur(4px);z-index:300;padding:20px;}
   .ctrl-modal{display:flex;flex-direction:column;width:min(1280px,96vw);max-height:94vh;border-radius:18px;overflow:hidden;box-shadow:0 40px 90px -20px rgba(0,0,0,.7);}
@@ -178,14 +97,6 @@
   .ctrl-close{flex-shrink:0;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#f5f6fb;font-size:15px;cursor:pointer;transition:.15s;}
   .ctrl-close:hover{background:rgba(224,57,76,.28);border-color:rgba(224,57,76,.5);}
   .ctrl-modal iframe{width:100%;height:644px;max-height:calc(94vh - 58px);border:0;display:block;background:#0e0e11;}
-  .modal{width:460px;max-width:92vw;background:#fff;border-radius:14px;box-shadow:0 30px 70px -24px rgba(20,22,28,.5);overflow:hidden;}
-  .modal-head{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
-  .modal-head h3{font-size:17px;font-weight:700;letter-spacing:-.01em;}
-  .modal-head .x{cursor:pointer;color:var(--text-3);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;font-size:18px;}
-  .modal-head .x:hover{background:var(--line-2);color:var(--ink);}
-  .modal-body{padding:22px 24px;}
-  .field{margin-bottom:16px;}
-  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--text-2);margin-bottom:7px;}
   .field input,.field select{width:100%;height:42px;border:1px solid #d7dae0;border-radius:8px;padding:0 13px;font:inherit;font-size:14px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;background:#fff;}
   .field select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px;}
   .field input:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent);}
@@ -194,12 +105,6 @@
   .uploader svg{color:var(--text-3);}
   .uploader.has{padding:10px;}
   .uploader img{max-height:96px;max-width:100%;border-radius:8px;}
-  .hint{font-size:12.5px;color:var(--text-3);}
-  .modal-foot{padding:16px 24px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;}
-  .btn-cancel{height:40px;padding:0 18px;border:1px solid #d7dae0;background:#fff;border-radius:8px;font:inherit;font-weight:600;font-size:13.5px;color:var(--text-2);cursor:pointer;}
-  .btn-cancel:hover{background:var(--bg-head);}
-  .btn-save{height:40px;padding:0 20px;border:none;background:var(--accent);color:#fff;border-radius:8px;font:inherit;font-weight:600;font-size:13.5px;cursor:pointer;box-shadow:0 1px 2px rgba(164,22,38,.22);}
-  .btn-save:hover{filter:brightness(1.08);}
 
   /* 操作菜单(三点下拉) */
   .kmenu{position:fixed;z-index:300;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 36px -10px rgba(20,22,28,.28);padding:6px;min-width:158px;display:none;}
@@ -210,17 +115,7 @@
   .kmenu .mi.danger:hover{background:#fdf1f1;}
   .kmenu .mi.danger svg{color:var(--accent);}
   .kmenu .sep{height:1px;background:var(--line);margin:5px 8px;}
-  .qrimg{width:220px;height:220px;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;}
   /* 授权 */
-  .gsel{flex:1;height:40px;border:1px solid #d7dae0;border-radius:8px;padding:0 10px;font:inherit;font-size:13.5px;color:var(--ink);background:#fff;outline:none;}
-  .gchk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;}
-  .gchk input{accent-color:var(--accent);}
-  .growrow{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line-2);font-size:14px;}
-  .growrow:last-child{border-bottom:none;}
-  .growrow .gn{flex:1;font-weight:500;}
-  .growrow .gp{font-size:12.5px;color:var(--text-3);}
-  .growrow .grm{color:var(--accent);cursor:pointer;font-size:12.5px;font-weight:600;}
-  .gempty{color:var(--text-3);font-size:13px;padding:8px 2px;}
 
   @media (max-width:1040px){.col-type,.th-type{display:none;}.grid{grid-template-columns:34px 1.9fr 1.3fr 0.85fr 0.95fr 44px;}}
   @media (max-width:860px){.col-ip,.th-ip{display:none;}.grid{grid-template-columns:34px 2fr 0.85fr 0.95fr 44px;}}
@@ -239,47 +134,10 @@
 </head>
 <body>
 
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo"><img src="/logo.svg" alt="MaxChemical" /></span>
-      <span class="brand-name">MaxChemical</span>
-      <span class="brand-badge mono">IoT&nbsp;CLOUD</span>
-      <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <div class="top-right">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.7 21a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-      <svg id="gear" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82 2 2 0 11-2.83 2.83 1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51 2 2 0 01-4 0 1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33 2 2 0 11-2.83-2.83A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1 2 2 0 010-4 1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82 2 2 0 112.83-2.83A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51 2 2 0 014 0 1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33 2 2 0 112.83 2.83A1.65 1.65 0 0019.4 9c.61.2 1.03.78 1 1.51a2 2 0 010 4z" stroke="currentColor" stroke-width="1.3"/></svg>
-      <span class="avatar" id="avatar" title="我的账号">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 21a8 8 0 10-16 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/></svg>
-        <span class="dot"></span>
-      </span>
-    </div>
-  </header>
+  <div id="shell-mount"></div>
 
-  <div class="shell">
-    <nav class="sidebar" id="sidebar">
-      <div class="nav-eyebrow">导航</div>
-      <div class="side-item" data-nav="dashboard" title="数据看板"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 3v18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7 14l3-4 3 2 4-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="side-label">数据看板</span></div>
-      <div class="side-item active" data-nav="devices" title="设备总览"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3.3 7L12 12l8.7-5M12 22V12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="side-label">设备总览</span></div>
-      <div class="side-item" data-nav="topology" title="设备拓扑"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="18" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="12" r="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M8 7l8 4M8 17l8-4" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="side-label">设备拓扑</span></div>
-      <div class="side-item" data-nav="tickets" title="工单管理"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="side-label">工单管理</span></div>
-      <div class="side-item" data-nav="sites" title="现场站点"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 10c0 6-8 11-8 11s-8-5-8-11a8 8 0 0116 0z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="side-label">现场站点</span></div>
-      <div class="side-item" data-nav="lab3d" title="3D 实验室"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M4 6.5l8 4.5 8-4.5M12 11v9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span><span class="side-label">3D 实验室</span></div>
-      <div class="side-item" data-nav="analytics" title="智能分析"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span><span class="side-label">智能分析</span></div>
-      <div class="side-item" id="navDevcenter" data-nav="devcenter" title="开发者中心(API 文档)"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M8 9l-3 3 3 3M16 9l3 3-3 3M13 5l-2 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="side-label">开发者中心</span></div>
+  <template id="page-content">
 
-      <div class="side-spacer"></div>
-
-      <div class="side-item" id="navSettings" data-nav="settings" title="设备管理"><span class="side-ico-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82 2 2 0 11-2.83 2.83 1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51 2 2 0 01-4 0 1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33 2 2 0 11-2.83-2.83A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1 2 2 0 010-4 1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82 2 2 0 112.83-2.83A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51 2 2 0 014 0 1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33 2 2 0 112.83 2.83A1.65 1.65 0 0019.4 9c.61.2 1.03.78 1 1.51a2 2 0 010 4z" stroke="currentColor" stroke-width="1.3"/></svg></span><span class="side-label">系统设置</span></div>
-      <div class="side-divider"></div>
-      <div class="side-item side-toggle" id="toggleBtn" onclick="toggleSidebar()" title="收起/展开">
-        <span class="side-ico-box"><svg class="tg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span class="side-label">收起菜单</span>
-      </div>
-    </nav>
-
-    <main class="content">
-      <div class="content-scroll">
         <div class="content-head">
           <div>
             <div class="kicker mono">REACTOR FLEET</div>
@@ -318,8 +176,9 @@
 
         <div class="cards" id="rows"></div>
         <div class="empty" id="empty" style="display:none">没有匹配的设备</div>
-      </div>
+  </template>
 
+  <template id="page-footer">
       <div class="footer">
         <div class="rows-sel">
           <span>每页行数</span>
@@ -329,10 +188,9 @@
         <div class="pager" id="pager"></div>
       </div>
       <iframe id="topoFrame" class="topo-frame" src="/process.html" title="工艺组态"></iframe>
-      <iframe id="sitesFrame" class="topo-frame" src="/sites.html" title="现场站点"></iframe>
+      <iframe id="sitesFrame" class="topo-frame" title="现场站点"></iframe><!-- 按需加载:sites.html 尚未创建,常驻 src 会每次开首页就 404 -->
       <iframe id="lab3dFrame" class="topo-frame" title="3D 实验室"></iframe><!-- WebGL 较重,首次点击才加载 -->
-    </main>
-  </div>
+  </template>
 
   <!-- 添加设备弹窗 -->
   <div class="mask" id="addMask">
@@ -412,19 +270,38 @@
   <!-- 操作下拉菜单 -->
   <div class="kmenu" id="kmenu"></div>
 
+  <script src="/shell.js"></script>
   <script>
-    function toggleSidebar(){
-      var s=document.getElementById('sidebar');s.classList.toggle('collapsed');
-      var l=document.querySelector('#toggleBtn .side-label');l.textContent=s.classList.contains('collapsed')?'展开菜单':'收起菜单';
-    }
-    const $=id=>document.getElementById(id);
+    // 顶栏/侧栏来自 shell.js，导航条目只在那里定义一次，本页和其它页共用同一套
+    Shell.mount('devices');
+
     function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
     const KEBAB='<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
 
     let ALL=[], tab='online', term='', page=1, perPage=12, isAdmin=false;
     let MODELS={};   // 型号 key -> {name, panelUrl}
+    let PRODUCTS={}; // productKey -> 物模型名称(MQTT 设备用)
+    const isMqtt=d=>d&&d.accessMode==='Mqtt';
     // 该型号是否有控制面板(无面板的型号:不可进入、不显示设备控制)
+    // MQTT 设备统一用按物模型动态渲染的通用面板 /panel.html,只要绑了物模型就有面板。
     function hasPanel(type){ const m=MODELS[type]; return !!(m && m.panelUrl); }
+    function hasPanelFor(d){ return isMqtt(d) ? !!d.productKey : hasPanel(d.deviceType); }
+    function panelUrlFor(d){
+      if(isMqtt(d)) return '/panel.html?code='+encodeURIComponent(d.code);
+      const m=MODELS[d.deviceType];
+      return m&&m.panelUrl ? m.panelUrl+'?code='+encodeURIComponent(d.code) : null;
+    }
+    function typeNameFor(d){
+      if(isMqtt(d)) return PRODUCTS[d.productKey]||d.productKey||'未绑定物模型';
+      return (MODELS[d.deviceType]&&MODELS[d.deviceType].name)||d.deviceType||'未指定型号';
+    }
+    // 物模型名称表(拿不到就退回显示 productKey,不影响页面)
+    async function loadProducts(){
+      try{
+        const r=await fetch('/admin/models'); if(!r.ok)return;
+        (await r.json()).forEach(m=>PRODUCTS[m.productKey]=m.modelName||m.productKey);
+      }catch(e){}
+    }
 
     // 加载设备型号目录:填充「添加设备」型号下拉,并供 openControl 按型号选面板
     async function loadModels(){
@@ -446,26 +323,32 @@
       const u=await me.json().catch(()=>({}));
       isAdmin=(u.role==='Admin');
       await loadModels();
+      if(isAdmin) await loadProducts();   // MQTT 设备的物模型名称(仅管理员可读)
       if(isAdmin) $('btnNew').style.display='';
       $('btnNew').onclick=openAdd;
-      $('avatar').onclick=()=>location.href='/account.html';
-      $('gear').onclick=()=>location.href='/account.html';
-      $('navSettings').onclick=()=>location.href='/account.html';
-      $('navDevcenter').onclick=()=>window.open('/swagger','_blank');
       // 设备拓扑:在应用框架内(保留左侧菜单/顶栏)嵌入工艺组态,而非跳走整页
       var topoFrame=document.getElementById('topoFrame');
       var sitesFrame=document.getElementById('sitesFrame');
       var contentScroll=document.querySelector('.content-scroll');
-      function setNavActive(nav){ document.querySelectorAll('.side-item').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-nav')===nav); }); }
+      function setNavActive(nav){ Shell.setActive(nav); }
       // iframe 已在 HTML 里带 src 常驻加载,这里仅用 visibility 覆盖/让出内容区
       function showTopo(on){ if(topoFrame) topoFrame.classList.toggle('show', on); }
-      function showSites(on){ if(sitesFrame) sitesFrame.classList.toggle('show', on); }
+      function showSites(on){ if(sitesFrame){ if(on&&!sitesFrame.getAttribute('src')) sitesFrame.src='/sites.html'; sitesFrame.classList.toggle('show', on); } }
       var lab3dFrame=document.getElementById('lab3dFrame');
       function showLab3d(on){ if(lab3dFrame){ if(on&&!lab3dFrame.getAttribute('src')) lab3dFrame.src='/lab3d.html'; lab3dFrame.classList.toggle('show', on); } }
-      var topo=document.querySelector('[data-nav="topology"]'); if(topo) topo.onclick=function(){ setNavActive('topology'); showTopo(true); showSites(false); showLab3d(false); };
-      var devNav=document.querySelector('[data-nav="devices"]'); if(devNav) devNav.onclick=function(){ setNavActive('devices'); showTopo(false); showSites(false); showLab3d(false); };
-      var sitesNav=document.querySelector('[data-nav="sites"]'); if(sitesNav) sitesNav.onclick=function(){ setNavActive('sites'); showSites(true); showTopo(false); showLab3d(false); };
-      var lab3dNav=document.querySelector('[data-nav="lab3d"]'); if(lab3dNav) lab3dNav.onclick=function(){ setNavActive('lab3d'); showLab3d(true); showTopo(false); showSites(false); };
+      // 这些视图在本页内用 iframe 覆盖内容区切换，不跳整页；
+      // 从别的页面点侧栏这些项时会跳回 / 并带上 #hash，由下面的 applyView 接住。
+      function applyView(v){
+        setNavActive(v);
+        showTopo(v==='topology'); showSites(v==='sites'); showLab3d(v==='lab3d');
+      }
+      Shell.onView = applyView;
+      var h=(location.hash||'').replace('#','');
+      if(['topology','sites','lab3d'].includes(h)) applyView(h);
+      window.addEventListener('hashchange',function(){
+        var v=(location.hash||'').replace('#','');
+        if(['topology','sites','lab3d'].includes(v)) applyView(v);
+      });
       document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{tab=t.dataset.tab;page=1;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));render();});
       $('searchInput').oninput=e=>{term=e.target.value.trim().toLowerCase();page=1;render();};
       $('rowsPer').onchange=e=>{perPage=parseInt(e.target.value)||12;page=1;render();};
@@ -490,18 +373,21 @@
       if(!total){rows.innerHTML='';empty.style.display='';}
       else{empty.style.display='none';
         rows.innerHTML=slice.map(d=>{
-          const panelized=hasPanel(d.deviceType);
+          const panelized=hasPanelFor(d);
           const click=(d.online&&panelized)?'clickable':'';
           const st=d.online
             ?'<span class="dcard-status on"><span class="d"></span>在线</span>'
             :'<span class="dcard-status off"><span class="d"></span>离线</span>';
           const go=!panelized
-            ?'<span style="color:var(--text-3);font-size:13px">暂未集成面板</span>'
+            ?'<span style="color:var(--text-3);font-size:13px">'+(isMqtt(d)?'未绑定物模型':'暂未集成面板')+'</span>'
             :(d.online
               ?'<span class="rowgo">进入面板 →</span>'
               :'<span style="color:var(--text-3);font-size:13px">设备离线</span>');
-          const typeName=(MODELS[d.deviceType]&&MODELS[d.deviceType].name)||d.deviceType||'未指定型号';
-          const ip=(d.online&&d.remote)?esc(d.remote):'—';
+          const typeName=typeNameFor(d);
+          // 接入方式标识:MQTT 网关 / 透传模式
+          const ip=isMqtt(d)
+            ? '<span style="color:var(--accent,#3E6AE1)">MQTT 网关</span>'
+            : ((d.online&&d.remote)?esc(d.remote):'透传模式');
           const media=d.hasImage
             ?`<img src="/web/devices/${encodeURIComponent(d.code)}/image" alt="${esc(d.name)}">`
             :`<span class="dcard-ph"><svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M3.3 7L12 12l8.7-5M12 22V12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
@@ -542,10 +428,13 @@
     function openKebab(el){
       const dev=ALL.find(d=>d.code===el.dataset.code); if(!dev)return;
       let h='';
-      if(dev.online && hasPanel(dev.deviceType)) h+=`<div class="mi" onclick="goControl('${dev.code}')">${IC.ctrl}设备控制</div>`;
+      if(dev.online && hasPanelFor(dev)) h+=`<div class="mi" onclick="goControl('${dev.code}')">${IC.ctrl}设备控制</div>`;
       h+=`<div class="mi" onclick="showQr('${dev.code}')">${IC.qr}二维码</div>`;
       if(isAdmin){
-        h+=`<div class="mi" onclick="openEdit('${dev.code}')">${IC.edit}编辑</div>`;
+        // MQTT 设备的编辑表单在「网关设备」页(选物模型而不是内置型号),这里只引导过去
+        h+= isMqtt(dev)
+          ? `<div class="mi" onclick="location.href='/gateways.html'">${IC.edit}到网关设备页编辑</div>`
+          : `<div class="mi" onclick="openEdit('${dev.code}')">${IC.edit}编辑</div>`;
         h+=`<div class="mi" onclick="openGrant('${dev.code}')">${IC.grant}授权</div>`;
         h+=`<div class="sep"></div><div class="mi danger" onclick="delDevice('${dev.id}')">${IC.del}删除</div>`;
       }
@@ -562,17 +451,18 @@
     function goControl(code){ closeKmenu(); openControl(code); }
     function openControl(code){
       const dev=ALL.find(x=>x.code===code);
-      const model=dev?MODELS[dev.deviceType]:null;     // 按设备型号选对应面板
       // 弹窗标题栏:设备名 / 序列号 / 型号 / 在线状态
       $('ctrlName').textContent=(dev&&dev.name)||code;
       $('ctrlCode').textContent=code;
-      $('ctrlType').textContent=(model&&model.name)||(dev&&dev.deviceType)||'';
+      $('ctrlType').textContent=dev?typeNameFor(dev):'';
       const on=!!(dev&&dev.online);
       $('ctrlStatus').className='ctrl-status '+(on?'on':'off');
       $('ctrlStatusText').textContent=on?'在线':'离线';
       const bust='&_v='+Date.now();   // 缓存击穿:每次都加载最新面板,避免浏览器缓存旧 reactor.html
-      const url = model && model.panelUrl
-        ? model.panelUrl+'?code='+encodeURIComponent(code)+bust
+      // MQTT 设备走按物模型动态渲染的通用面板;透传设备照旧走型号绑定的专属面板
+      const base=dev?panelUrlFor(dev):null;
+      const url = base
+        ? base+bust
         : '/panel-unsupported.html?type='+encodeURIComponent((dev&&dev.deviceType)||'')+'&code='+encodeURIComponent(code)+bust;
       $('ctrlFrame').src=url;
       $('ctrlMask').style.display='flex';

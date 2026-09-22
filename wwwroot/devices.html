@@ -4,156 +4,280 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>设备管理 · MaxChemical</title>
-  <link rel="stylesheet" href="/app.css" />
+  <link rel="stylesheet" href="/shell.css" />
   <style>
-    .form{display:grid;grid-template-columns:1fr 1fr 130px auto;gap:14px;align-items:end}
-    .hint{font-size:13px;color:var(--pewter);margin-top:12px;display:flex;align-items:center;gap:7px}
-    .code{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:500;color:var(--on-dark)}
-    .cell-name{display:flex;align-items:center;gap:12px}
-    .acts{display:flex;gap:8px;justify-content:flex-end}
-    .qrbox{text-align:center}
-    .qrbox img{width:220px;height:220px;border-radius:12px;border:1px solid var(--glass-line);padding:8px;background:#fff}
-    .qrbox .c{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;font-weight:600;margin:16px 0 4px}
-    .grow{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--glass-line)}
-    .grow:last-child{border-bottom:none}
-    .grow .nm{flex:1;font-size:14px}
-    .grow .pm{font-size:12px;color:var(--pewter)}
-    .chk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--body)}
+    .grid{display:grid;grid-template-columns:2fr 1fr 1.4fr 0.7fr 0.9fr 300px;align-items:center;gap:12px}
+    .list{margin-top:16px}
+    .dev{display:flex;align-items:center;gap:12px;min-width:0}
+    .ac-ico{width:34px;height:26px;border-radius:6px;flex-shrink:0;background:linear-gradient(180deg,#f3f4f6,#e9ebef);
+      border:1px solid #e4e6ea;position:relative}
+    .ac-ico::before{content:"";position:absolute;left:6px;top:6px;width:7px;height:13px;border-radius:3px;border:1px solid #cfd3d9}
+    .ac-ico::after{content:"";position:absolute;right:6px;top:9px;width:7px;height:7px;border-radius:50%;border:1.4px solid #cfd3d9}
+    .dev-text{min-width:0}
+    .dev-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .dev-code{font-size:11px;color:var(--text-3);margin-top:2px;letter-spacing:.02em}
+    .dtype{color:var(--text-2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .acts{display:flex;gap:7px;justify-content:flex-end}
+    .qrwrap{text-align:center}
+    /* 内容可能是一整条绑定链接，必须能换行，否则会把弹窗撑破 */
+    .qrwrap .c{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;font-size:13.5px;
+      font-weight:600;margin:14px 0 4px;word-break:break-all;line-height:1.5}
+    .filter{font:inherit;font-size:13px;border:1px solid #d7dae0;border-radius:8px;padding:8px 10px;
+      color:var(--ink);background:#fff;cursor:pointer}
+    @media (max-width:1180px){.grid{grid-template-columns:2fr 1fr 1.2fr 0.9fr 240px}.col-st,.th-st{display:none}}
+    @media (max-width:900px){.grid{grid-template-columns:2fr 1fr 200px}.col-type,.th-type,.col-mode,.th-mode{display:none}}
   </style>
 </head>
-<body class="app-bg">
-  <nav class="nav">
-    <div class="brand"><span class="mark">M</span>MaxChemical <b>物联网平台</b></div>
-    <div class="sp"></div>
-    <a class="link" href="/">设备总览</a>
-    <a class="link active" href="/devices.html">设备管理</a>
-    <a class="link" href="/account.html">我的账号</a>
-    <a class="link" href="/swagger" target="_blank">API 文档</a>
-    <a class="link" href="#" id="logout">退出</a>
-  </nav>
+<body>
+  <div id="shell-mount"></div>
+  <template id="page-content">
 
-  <div class="wrap">
-    <div class="page-head"><h1>设备管理</h1><p>添加设备会自动生成序列号(=DTU 登录包)与二维码</p></div>
-
-    <div class="card card-pad" style="margin:22px 0 16px">
-      <div class="form">
-        <div><label class="lab">设备名称</label><input class="inp" id="devName" placeholder="如 1号高压反应釜" /></div>
-        <div><label class="lab">设备类型</label><input class="inp" id="devType" placeholder="如 HighPreactor_ModbusRTU" /></div>
-        <div><label class="lab">Modbus 站号</label><input class="inp" id="devStation" type="number" value="1" min="1" /></div>
-        <div><button class="btn" id="add">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>添加设备</button></div>
+    <div class="content-head">
+      <div>
+        <div class="kicker mono">PASSTHROUGH</div>
+        <h1 class="title">设备管理</h1>
+        <div class="subtitle">透传模式设备，添加后自动生成序列号（= DTU 登录包）与二维码</div>
       </div>
-      <div class="hint">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v.5M12 11v5" stroke-linecap="round"/></svg>
-        序列号由系统自动生成,创建后请把它填入对应 DTU 的「登录包」。
+      <div class="head-actions">
+        <button class="btn-new" id="btnAdd">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>添加设备</button>
       </div>
-      <div class="err" id="addErr" style="margin-top:8px"></div>
     </div>
 
-    <div class="card" style="margin-bottom:48px;overflow:hidden">
-      <div style="padding:18px 22px;border-bottom:1px solid var(--glass-line);font-size:15px;font-weight:600">设备列表</div>
-      <div style="padding:4px 8px"><table>
-        <thead><tr><th style="padding-left:14px">设备</th><th>类型</th><th>站号</th><th>状态</th><th style="text-align:right;padding-right:14px">操作</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table></div>
+    <div class="notice" style="margin-top:20px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"/><path d="M12 8v.5M12 11v5" stroke-linecap="round"/></svg>
+      <div>这一页添加的是 <b>透传模式</b> 设备：DTU 用登录包（序列号）连上服务器，服务端只做字节透传 + 帧组装，
+        桌面端经 SignalR 隧道中转，<b>这条链路没有任何改动</b>。<br />
+        走 MQTT 的设备接入网关请到 <a href="/gateways.html">网关设备</a> 页面添加。</div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
+        <input id="q" placeholder="搜索设备名、序列号、型号…" />
+      </div>
+      <div class="tool-actions">
+        <span class="hint">接入方式</span>
+        <select class="filter" id="modeFilter">
+          <option value="passthrough">仅透传模式</option>
+          <option value="">全部</option>
+          <option value="mqtt">仅 MQTT 网关</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="list">
+      <div class="grid t-head">
+        <div>设备</div><div class="th-mode">接入方式</div><div class="th-type">型号</div>
+        <div>站号</div><div class="th-st">状态</div><div style="text-align:right">操作</div>
+      </div>
+      <div id="rows"></div>
+      <div class="empty" id="empty" style="display:none">还没有设备</div>
+    </div>
+    <div style="height:40px"></div>
+
+  </template>
+
+  <!-- 添加设备 -->
+  <div class="mask" id="addMask">
+    <div class="modal">
+      <div class="modal-head"><h3>添加透传设备</h3><span class="x" onclick="hide('addMask')">×</span></div>
+      <div class="modal-body">
+        <div class="field"><label>设备名称 *</label>
+          <input id="aName" placeholder="如 1号高压反应釜" /></div>
+        <div class="field"><label>设备型号</label>
+          <select id="aType"></select></div>
+        <div class="field"><label>Modbus 站号</label>
+          <input id="aStation" type="number" value="1" min="1" /></div>
+        <div class="field" style="margin-bottom:8px">
+          <div class="lbl-row">
+            <label for="aCode">设备序列号</label>
+            <label class="gchk"><input type="checkbox" id="aAuto" checked /> 自动生成</label>
+          </div>
+          <input id="aCode" placeholder="自动生成" disabled />
+        </div>
+        <p class="hint">序列号即 DTU 的「登录包」内容。DTU 出厂号写死、改不了时，取消「自动生成」按实际号填。</p>
+        <div class="err" id="aErr" style="margin-top:10px"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="hide('addMask')">取消</button>
+        <button class="btn-save" id="aGo">创建</button>
+      </div>
     </div>
   </div>
 
-  <!-- QR -->
+  <!-- 二维码 -->
   <div class="mask" id="qrMask">
-    <div class="modal qrbox">
-      <span class="close" onclick="hide('qrMask')">×</span>
-      <h3 style="text-align:left">设备二维码</h3>
-      <img id="qrImg" alt="二维码" />
-      <div class="c" id="qrCode"></div>
-      <p style="color:var(--pewter);font-size:13px">二维码内容即序列号,扫码或抄写后填入 DTU 登录包</p>
-      <a id="qrDl" download><button class="btn ghost" style="margin-top:12px">下载 PNG</button></a>
+    <div class="modal">
+      <div class="modal-head"><h3>设备二维码</h3><span class="x" onclick="hide('qrMask')">×</span></div>
+      <div class="modal-body qrwrap">
+        <img class="qrimg" id="qrImg" alt="二维码" />
+        <div class="c" id="qrCode"></div>
+        <p class="hint" id="qrHint">二维码内容即序列号，扫码或抄写后填入 DTU 登录包</p>
+      </div>
+      <div class="modal-foot">
+        <a id="qrDl" download><button class="btn-cancel">下载 PNG</button></a>
+        <button class="btn-save" onclick="hide('qrMask')">完成</button>
+      </div>
     </div>
   </div>
 
   <!-- 授权 -->
   <div class="mask" id="grantMask">
     <div class="modal">
-      <span class="close" onclick="hide('grantMask')">×</span>
-      <h3 id="grantTitle">授权</h3>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <select class="inp" id="grantUser" style="flex:1"></select>
-        <label class="chk"><input type="checkbox" id="gMon" checked> 监控</label>
-        <label class="chk"><input type="checkbox" id="gCtl"> 控制</label>
-        <button class="btn sm" id="grantAdd">授权</button>
+      <div class="modal-head"><h3 id="grantTitle">授权</h3><span class="x" onclick="hide('grantMask')">×</span></div>
+      <div class="modal-body">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+          <select class="gsel" id="grantUser"></select>
+          <label class="gchk"><input type="checkbox" id="gMon" checked> 监控</label>
+          <label class="gchk"><input type="checkbox" id="gCtl"> 控制</label>
+          <button class="btn-save" id="grantAdd" style="height:40px">授权</button>
+        </div>
+        <div id="grantList"></div>
       </div>
-      <div id="grantList"></div>
+      <div class="modal-foot"><button class="btn-cancel" onclick="hide('grantMask')">关闭</button></div>
     </div>
   </div>
 
-  <script>
-    let curDeviceId=null;
-    const $=id=>document.getElementById(id);
-    function hide(id){$(id).style.display='none';} function show(id){$(id).style.display='flex';}
-    function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-    async function guard(r){if(r.status===401){location.href='/login.html?next=/devices.html';throw 0;}if(r.status===403){alert('需要管理员权限');throw 0;}return r;}
-    const rIcon=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 3h6M10 3v5l-4.2 8.4A2 2 0 0 0 7.6 19h8.8a2 2 0 0 0 1.8-2.6L14 8V3" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 14h9" stroke-linecap="round"/></svg>`;
+<script src="/shell.js"></script>
+<script>
+Shell.mount('manage');
 
-    async function loadDevices(){
-      const r=await guard(await fetch('/admin/devices'));
-      const list=await r.json(); const rows=$('rows');
-      if(!list.length){rows.innerHTML='<tr><td colspan="5" style="color:var(--mute);padding:24px 14px">还没有设备,在上方添加</td></tr>';return;}
-      rows.innerHTML=list.map(d=>{
-        const badge=d.online?'<span class="badge on"><span class="dot ok"></span>在线</span>':'<span class="badge off"><span class="dot bad"></span>离线</span>';
-        return `<tr>
-        <td style="padding-left:14px"><div class="cell-name">
-          <div class="iconbox ${d.online?'':'gray'}" style="width:36px;height:36px">${rIcon}</div>
-          <div><div style="font-weight:500">${esc(d.name)}</div><div class="code" style="font-size:12px;color:var(--mute)">${esc(d.dtuSerial)}</div></div>
-        </div></td>
-        <td>${esc(d.deviceType)||'—'}</td><td>${d.modbusStation}</td><td>${badge}</td>
-        <td><div class="acts">
-          <button class="btn ghost sm" data-qr="${d.id}|${esc(d.dtuSerial)}">二维码</button>
-          <button class="btn ghost sm" data-grant="${d.id}|${esc(d.name)}">授权</button>
-          <button class="btn danger sm" data-del="${d.id}">删除</button>
-        </div></td></tr>`;}).join('');
-    }
+const esc=Shell.esc;
+function hide(id){$(id).style.display='none';} function show(id){$(id).style.display='flex';}
 
-    $('add').addEventListener('click', async ()=>{
-      const err=$('addErr'); err.textContent='';
-      if(!$('devName').value.trim()){err.textContent='请填写设备名称';return;}
-      const fd=new FormData();
-      fd.append('name',$('devName').value.trim());
-      fd.append('deviceType',$('devType').value.trim());
-      fd.append('modbusStation',parseInt($('devStation').value)||1);
-      const r=await fetch('/admin/devices',{method:'POST',body:fd});
-      if(r.ok){ const dev=await r.json(); $('devName').value=$('devType').value=''; $('devStation').value=1;
-        loadDevices(); alert('设备已创建。\n序列号(请填入对应 DTU 的登录包):\n'+dev.dtuSerial); }
-      else{ const d=await r.json().catch(()=>({})); err.textContent=d.error||'添加失败'; }
-    });
+let LIST=[], MODELS=[], term='', curDeviceId=null;
 
-    $('rows').addEventListener('click', async (e)=>{
-      const b=e.target.closest('button'); if(!b)return;
-      if(b.dataset.qr){ const [id,serial]=b.dataset.qr.split('|');
-        $('qrImg').src=`/admin/devices/${id}/qr.png`; $('qrDl').href=`/admin/devices/${id}/qr.png`;
-        $('qrDl').setAttribute('download',serial+'.png'); $('qrCode').textContent=serial; show('qrMask');
-      } else if(b.dataset.grant){ const [id,nm]=b.dataset.grant.split('|');
-        curDeviceId=id; $('grantTitle').textContent='授权 · '+nm; await loadUsers(); await loadGrants(); show('grantMask');
-      } else if(b.dataset.del){ if(!confirm('确定删除该设备?其授权会一并清除。'))return;
-        await fetch('/admin/devices/'+b.dataset.del,{method:'DELETE'}); loadDevices(); }
-    });
+async function loadModels(){
+  try{
+    const r=await fetch('/web/device-models'); if(!r.ok)return;
+    MODELS=await r.json();
+    $('aType').innerHTML=MODELS.map(m=>`<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('');
+  }catch{}
+}
 
-    async function loadUsers(){ const r=await fetch('/admin/users'); const users=await r.json();
-      $('grantUser').innerHTML=users.map(u=>`<option value="${u.id}">${esc(u.username)} (${u.role})</option>`).join(''); }
-    async function loadGrants(){ const r=await fetch('/admin/grants?deviceId='+curDeviceId); const list=await r.json();
-      const box=$('grantList');
-      if(!list.length){box.innerHTML='<p style="color:var(--mute);font-size:13px;padding:6px 0">暂无授权</p>';return;}
-      box.innerHTML=list.map(g=>`<div class="grow"><span class="nm">${esc(g.username)}</span>
-        <span class="pm">${g.canMonitor?'监控':''}${g.canControl?' · 控制':''}</span>
-        <button class="btn danger sm" data-rg="${g.id}">移除</button></div>`).join('');
-      box.querySelectorAll('[data-rg]').forEach(btn=>btn.addEventListener('click',async()=>{
-        await fetch('/admin/grants/'+btn.dataset.rg,{method:'DELETE'}); loadGrants(); })); }
-    $('grantAdd').addEventListener('click', async ()=>{
-      await fetch('/admin/grants',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({userId:$('grantUser').value,deviceId:curDeviceId,canMonitor:$('gMon').checked,canControl:$('gCtl').checked})});
-      loadGrants(); });
+async function loadDevices(){
+  const mode=$('modeFilter').value;
+  const r=await Shell.guard(await fetch('/admin/devices'+(mode?('?mode='+mode):'')));
+  LIST=await r.json();
+  render();
+}
 
-    $('logout').addEventListener('click',async e=>{e.preventDefault();await fetch('/auth/logout',{method:'POST'});location.href='/login.html';});
-    loadDevices().catch(()=>{});
-  </script>
+function render(){
+  const t=term.toLowerCase();
+  const list=!t?LIST:LIST.filter(d=>
+    (d.name||'').toLowerCase().includes(t)||(d.dtuSerial||'').toLowerCase().includes(t)||
+    (d.code||'').toLowerCase().includes(t)||(d.deviceType||'').toLowerCase().includes(t));
+
+  $('empty').style.display=list.length?'none':'';
+  $('empty').textContent=LIST.length?'没有匹配的设备':'还没有设备，点右上角「添加设备」';
+
+  $('rows').innerHTML=list.map(d=>{
+    const mq=d.accessMode==='Mqtt';
+    // MQTT 设备在这一页只读展示，编辑/删除引导到「网关设备」页，避免两套表单互相冲
+    const mtag=mq?'<span class="chip accent">MQTT 网关</span>':'<span class="chip">透传模式</span>';
+    const typeName=mq
+      ? (esc(d.productKey)||'—')
+      : ((MODELS.find(m=>m.key===d.deviceType)||{}).name||esc(d.deviceType)||'—');
+    const acts=mq
+      ? `<a href="/gateways.html"><button class="ghost-btn btn-xs">去网关设备页管理</button></a>`
+      : `<button class="ghost-btn btn-xs" data-qr="${d.id}|${esc(d.dtuSerial)}">二维码</button>
+         <button class="ghost-btn btn-xs" data-grant="${d.id}|${esc(d.name)}">授权</button>
+         <button class="ghost-btn btn-xs danger" data-del="${d.id}">删除</button>`;
+    return `<div class="grid t-row">
+      <div class="dev"><span class="ac-ico"></span><div class="dev-text">
+        <div class="dev-name">${esc(d.name)}</div>
+        <div class="dev-code mono">${esc(mq?d.code:d.dtuSerial)}</div></div></div>
+      <div class="col-mode">${mtag}</div>
+      <div class="col-type dtype">${typeName}</div>
+      <div>${mq?'—':d.modbusStation}</div>
+      <div class="col-st"><span class="status ${d.online?'on':'off'}"><span class="d"></span>${d.online?'在线':'离线'}</span></div>
+      <div class="acts">${acts}</div></div>`;}).join('');
+}
+
+$('q').oninput=e=>{term=e.target.value.trim();render();};
+$('modeFilter').onchange=loadDevices;
+
+const CODE_RE=/^[A-Za-z0-9_-]{2,64}$/;
+function syncAutoCode(){
+  const on=$('aAuto').checked;
+  $('aCode').disabled=on;
+  $('aCode').placeholder=on?'自动生成':'如 00110';
+  if(on)$('aCode').value='';
+}
+$('aAuto').addEventListener('change',syncAutoCode);
+
+$('btnAdd').onclick=()=>{
+  $('aName').value=''; $('aStation').value=1; $('aErr').textContent='';
+  $('aAuto').checked=true; syncAutoCode();
+  show('addMask');
+};
+$('aGo').onclick=async()=>{
+  const err=$('aErr'); err.textContent='';
+  if(!$('aName').value.trim()){err.textContent='请填写设备名称';return;}
+  const fd=new FormData();
+  fd.append('name',$('aName').value.trim());
+  fd.append('deviceType',$('aType').value||'');
+  fd.append('modbusStation',parseInt($('aStation').value)||1);
+  if(!$('aAuto').checked){
+    const c=$('aCode').value.trim();
+    if(!c){err.textContent='请填写设备序列号，或勾选「自动生成」';return;}
+    if(!CODE_RE.test(c)){err.textContent='序列号只能用字母、数字、下划线、短横线，长度 2-64';return;}
+    fd.append('code',c);
+  }
+  const r=await fetch('/admin/devices',{method:'POST',body:fd});
+  if(!r.ok){err.textContent=await Shell.errText(r);return;}
+  const dev=await r.json();
+  hide('addMask'); await loadDevices();
+  alert('设备已创建。\n序列号（请填入对应 DTU 的登录包）：\n'+dev.dtuSerial);
+};
+
+$('rows').addEventListener('click', async (e)=>{
+  const b=e.target.closest('button'); if(!b)return;
+  if(b.dataset.qr){ const [id,serial]=b.dataset.qr.split('|');
+    $('qrImg').src=`/admin/devices/${id}/qr.png`; $('qrDl').href=`/admin/devices/${id}/qr.png`;
+    $('qrDl').setAttribute('download',serial+'.png');
+    $('qrCode').textContent=serial; $('qrHint').textContent='正在读取二维码内容…';
+    show('qrMask');
+    await showQrContent(id,serial);
+  } else if(b.dataset.grant){ const [id,nm]=b.dataset.grant.split('|');
+    curDeviceId=id; $('grantTitle').textContent='授权 · '+nm; await loadUsers(); await loadGrants(); show('grantMask');
+  } else if(b.dataset.del){ if(!confirm('确定删除该设备？其授权会一并清除。'))return;
+    await fetch('/admin/devices/'+b.dataset.del,{method:'DELETE'}); loadDevices(); }
+});
+
+// 二维码里写的到底是序列号还是绑定链接，由后端按物模型决定，前端不猜，问一次
+async function showQrContent(id,fallback){
+  try{
+    const r=await fetch(`/admin/devices/${id}/qr-content`);
+    if(!r.ok){ $('qrHint').textContent='二维码内容即序列号，扫码或抄写后填入 DTU 登录包'; return; }
+    const q=await r.json();
+    $('qrCode').textContent=q.content||fallback;
+    $('qrHint').textContent=q.isUrl
+      ? '内容是绑定链接，微信/系统相机扫码可直接打开；APP 从中取 code 参数即设备标识码'
+      : '二维码内容即序列号，扫码或抄写后填入 DTU 登录包';
+  }catch(e){
+    $('qrHint').textContent='二维码内容即序列号，扫码或抄写后填入 DTU 登录包';
+  }
+}
+
+async function loadUsers(){ const r=await fetch('/admin/users'); const users=await r.json();
+  $('grantUser').innerHTML=users.map(u=>`<option value="${u.id}">${esc(u.username)}（${esc(u.role)}）</option>`).join(''); }
+async function loadGrants(){ const r=await fetch('/admin/grants?deviceId='+curDeviceId); const list=await r.json();
+  const box=$('grantList');
+  if(!list.length){box.innerHTML='<p class="gempty">暂无授权</p>';return;}
+  box.innerHTML=list.map(g=>`<div class="growrow"><span class="gn">${esc(g.username)}</span>
+    <span class="gp">${g.canMonitor?'监控':''}${g.canControl?' · 控制':''}</span>
+    <span class="grm" data-rg="${g.id}">移除</span></div>`).join('');
+  box.querySelectorAll('[data-rg]').forEach(x=>x.onclick=async()=>{
+    await fetch('/admin/grants/'+x.dataset.rg,{method:'DELETE'}); loadGrants(); }); }
+$('grantAdd').onclick=async()=>{
+  await fetch('/admin/grants',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({userId:$('grantUser').value,deviceId:curDeviceId,
+      canMonitor:$('gMon').checked,canControl:$('gCtl').checked})});
+  loadGrants(); };
+
+(async()=>{ await loadModels(); await loadDevices(); setInterval(loadDevices,10000); })().catch(()=>{});
+</script>
 </body>
 </html>

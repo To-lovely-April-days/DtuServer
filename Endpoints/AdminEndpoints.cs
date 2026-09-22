@@ -16,13 +16,24 @@ namespace MaxChemical.DtuServer.Endpoints
             var g = app.MapGroup("/admin").RequireAuthorization("AdminOnly");
 
             // ---- 设备 ----
-            g.MapGet("/devices", async (AppDbContext db, DtuServerManager mgr) =>
+            // mode 可选:passthrough(仅透传) / mqtt(仅MQTT网关) / 不传=全部。
+            // 不传时行为与以前一致,老前端不受影响。
+            g.MapGet("/devices", async (AppDbContext db, DtuServerManager mgr, MqttGatewayService mqtt, string? mode) =>
             {
-                var list = await db.Devices.OrderByDescending(d => d.CreatedAt).ToListAsync();
+                var q = db.Devices.AsQueryable();
+                if (string.Equals(mode, "passthrough", StringComparison.OrdinalIgnoreCase))
+                    q = q.Where(d => d.AccessMode != AccessModes.Mqtt);
+                else if (string.Equals(mode, "mqtt", StringComparison.OrdinalIgnoreCase))
+                    q = q.Where(d => d.AccessMode == AccessModes.Mqtt);
+
+                var list = await q.OrderByDescending(d => d.CreatedAt).ToListAsync();
                 return Results.Ok(list.Select(d => new
                 {
                     d.Id, d.Code, d.Name, d.DeviceType, d.DtuSerial, d.ModbusStation, d.CreatedAt,
-                    online = mgr.IsOnline(d.DtuSerial)
+                    accessMode = AccessModes.Normalize(d.AccessMode),
+                    d.ProductKey,
+                    // 在线状态按接入方式各查各的
+                    online = AccessModes.IsMqtt(d.AccessMode) ? mqtt.IsOnline(d.Code) : mgr.IsOnline(d.DtuSerial)
                 }));
             });
 
@@ -36,17 +47,16 @@ namespace MaxChemical.DtuServer.Endpoints
                 if (string.IsNullOrWhiteSpace(name))
                     return Results.BadRequest(new { error = "设备名不能为空" });
 
-                // 自动生成 DTU 登录包序列号(同时作为对外标识码),用户把它手填进 DTU。
-                string serial = SecurityUtil.NewDtuSerial();
-                for (int i = 0; i < 5 && await db.Devices.AnyAsync(d => d.DtuSerial == serial || d.Code == serial); i++)
-                    serial = SecurityUtil.NewDtuSerial();
+                // 序列号(同时作为对外标识码):表单填了就用手填的,没填就自动生成。
+                var (serial, codeErr) = await ResolveNewDeviceCodeAsync(db, form["code"].ToString());
+                if (codeErr is not null) return Results.BadRequest(new { error = codeErr });
 
                 var dev = new Device
                 {
-                    Code = serial,
+                    Code = serial!,
                     Name = name,
                     DeviceType = deviceType,
-                    DtuSerial = serial,
+                    DtuSerial = serial!,
                     ModbusStation = station <= 0 ? 1 : station,
                     CreatedByUserId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "",
                 };
@@ -72,6 +82,9 @@ namespace MaxChemical.DtuServer.Endpoints
             {
                 var dev = await db.Devices.FindAsync(id);
                 if (dev == null) return Results.NotFound();
+                // MQTT 设备有自己的编辑入口(型号=物模型,不是内置型号),别让老表单把它的 DeviceType 冲掉
+                if (AccessModes.IsMqtt(dev.AccessMode))
+                    return Results.BadRequest(new { error = "该设备是 MQTT 网关设备,请到「网关设备」页面编辑" });
 
                 var form = await ctx.Request.ReadFormAsync();
                 var name = form["name"].ToString().Trim();
@@ -104,17 +117,32 @@ namespace MaxChemical.DtuServer.Endpoints
                 // 一并清理该设备的授权
                 var grants = db.Grants.Where(x => x.DeviceId == id);
                 db.Grants.RemoveRange(grants);
+                // 以及它的告警记录(MQTT 设备才会有)
+                db.DeviceAlarms.RemoveRange(db.DeviceAlarms.Where(a => a.DeviceCode == dev.Code));
                 await db.SaveChangesAsync();
                 return Results.Ok();
             });
 
-            // 二维码 PNG:内容就是设备序列号(=DTU 登录包),扫码即得序列号,方便填入 DTU/记录
-            g.MapGet("/devices/{id}/qr.png", async (string id, AppDbContext db) =>
+            // 二维码 PNG。透传设备:内容仍是序列号(=DTU 登录包),扫码即得序列号,方便填入 DTU。
+            // MQTT 设备:按物模型 meta.qrCode 生成绑定链接,微信扫了能直接打开 bind.html。
+            g.MapGet("/devices/{id}/qr.png", async (string id, HttpContext ctx, AppDbContext db, IConfiguration cfgRoot) =>
             {
                 var dev = await db.Devices.FindAsync(id);
                 if (dev == null) return Results.NotFound();
-                var png = QrService.PngFor(dev.DtuSerial, 10);
-                return Results.File(png, "image/png");
+                var text = await QrService.ContentForDeviceAsync(db, dev, PublicBaseUrl(ctx, cfgRoot));
+                return Results.File(QrService.PngFor(text, 10), "image/png");
+            });
+
+            // 二维码里到底写了什么 —— 前端弹窗要显示这串文本,不能自己猜
+            g.MapGet("/devices/{id}/qr-content", async (string id, HttpContext ctx, AppDbContext db, IConfiguration cfgRoot) =>
+            {
+                var dev = await db.Devices.FindAsync(id);
+                if (dev == null) return Results.NotFound();
+                var text = await QrService.ContentForDeviceAsync(db, dev, PublicBaseUrl(ctx, cfgRoot));
+                // isUrl 直接看内容本身,不靠"跟序列号不一样"去反推 —— 那个前提以后可能不成立
+                var isUrl = Uri.TryCreate(text, UriKind.Absolute, out var u) &&
+                            (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps);
+                return Results.Ok(new { dev.Code, content = text, isUrl });
             });
 
             // ---- 用户(用于授权选择)----
@@ -174,6 +202,32 @@ namespace MaxChemical.DtuServer.Endpoints
             var configured = cfg["PublicBaseUrl"];
             if (!string.IsNullOrWhiteSpace(configured)) return configured.TrimEnd('/');
             return $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+        }
+
+        /// <summary>设备标识码只允许出现在 URL 路径/查询里安全的字符,否则二维码链接和拉配置的路由都会歪。</summary>
+        internal static readonly System.Text.RegularExpressions.Regex DeviceCodePattern =
+            new(@"^[A-Za-z0-9_-]{2,64}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// 决定新设备的标识码。表单填了就用手填的 —— 网关序列号出厂就烧死了(比如 00110)的场景,
+        /// 平台这边必须能对上那个号;没填就照旧自动生成。透传设备和 MQTT 设备共用这一套规则。
+        /// </summary>
+        internal static async Task<(string? code, string? error)> ResolveNewDeviceCodeAsync(AppDbContext db, string? requested)
+        {
+            var code = (requested ?? "").Trim();
+            if (code.Length == 0)
+            {
+                var gen = SecurityUtil.NewDtuSerial();
+                for (int i = 0; i < 5 && await db.Devices.AnyAsync(d => d.DtuSerial == gen || d.Code == gen); i++)
+                    gen = SecurityUtil.NewDtuSerial();
+                return (gen, null);
+            }
+
+            if (!DeviceCodePattern.IsMatch(code))
+                return (null, "设备标识码只能用字母、数字、下划线、短横线,长度 2-64");
+            if (await db.Devices.AnyAsync(d => d.Code == code || d.DtuSerial == code))
+                return (null, $"设备标识码 “{code}” 已被占用");
+            return (code, null);
         }
     }
 }

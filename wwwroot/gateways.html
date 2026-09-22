@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>网关设备 · MaxChemical</title>
+  <link rel="stylesheet" href="/shell.css" />
+  <style>
+    /* 列表网格，列宽与设备总览页同一套比例 */
+    .grid{display:grid;grid-template-columns:2fr 1.5fr 0.9fr 0.9fr 320px;align-items:center;gap:12px}
+    .list{margin-top:16px}
+    .dev{display:flex;align-items:center;gap:12px;min-width:0}
+    .ac-ico{width:34px;height:26px;border-radius:6px;flex-shrink:0;background:linear-gradient(180deg,#f3f4f6,#e9ebef);
+      border:1px solid #e4e6ea;position:relative}
+    .ac-ico::before{content:"";position:absolute;left:6px;top:6px;width:7px;height:13px;border-radius:3px;border:1px solid #cfd3d9}
+    .ac-ico::after{content:"";position:absolute;right:6px;top:9px;width:7px;height:7px;border-radius:50%;border:1.4px solid #cfd3d9}
+    .ac-img{width:34px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--line);background:#f3f4f6}
+    .dev-text{min-width:0}
+    .dev-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .dev-code{font-size:11px;color:var(--text-3);margin-top:2px;letter-spacing:.02em}
+    .mdl{min-width:0}
+    .mdl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mdl-ver{font-size:11px;color:var(--text-3);margin-top:2px}
+    .acts{display:flex;gap:7px;justify-content:flex-end}
+    .qrwrap{text-align:center}
+    /* 内容可能是一整条绑定链接，必须能换行，否则会把弹窗撑破 */
+    .qrwrap .c{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;font-size:13.5px;
+      font-weight:600;margin:14px 0 4px;word-break:break-all;line-height:1.5}
+    @media (max-width:1180px){.grid{grid-template-columns:2fr 1.4fr 0.9fr 260px}.col-seen,.th-seen{display:none}}
+    @media (max-width:900px){.grid{grid-template-columns:2fr 1fr 200px}.col-model,.th-model{display:none}}
+  </style>
+</head>
+<body>
+  <div id="shell-mount"></div>
+  <template id="page-content">
+
+    <div class="content-head">
+      <div>
+        <div class="kicker mono">MQTT GATEWAY</div>
+        <h1 class="title">网关设备</h1>
+        <div class="subtitle">走 MQTT 接入的设备，每台绑定一个物模型，网关和 APP 都按那份配置跑</div>
+      </div>
+      <div class="head-actions">
+        <button class="btn-new" id="btnAdd">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>添加设备</button>
+      </div>
+    </div>
+
+    <div class="notice" style="margin-top:20px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"/><path d="M12 8v.5M12 11v5" stroke-linecap="round"/></svg>
+      <div>这一页管的是 <b>MQTT 网关设备</b>。原来那套 <b>DTU 透传设备</b>（序列号登录包 + 字节透传 + 桌面端隧道）
+        在 <a href="/devices.html">设备管理</a> 页，两条链路各走各的，互不影响。</div>
+    </div>
+    <div id="warnBox"></div>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
+        <input id="q" placeholder="搜索设备名、标识码、物模型…" />
+      </div>
+      <div class="tool-actions">
+        <span class="chip" id="mqttPill">MQTT 状态检查中…</span>
+      </div>
+    </div>
+
+    <div class="list">
+      <div class="grid t-head">
+        <div>设备</div><div class="th-model">物模型</div><div>状态</div>
+        <div class="th-seen">最后上报</div><div style="text-align:right">操作</div>
+      </div>
+      <div id="rows"></div>
+      <div class="empty" id="empty" style="display:none">还没有网关设备，点右上角「添加设备」</div>
+    </div>
+    <div style="height:40px"></div>
+
+  </template>
+
+  <!-- 添加 / 编辑设备 -->
+  <div class="mask" id="devMask">
+    <div class="modal">
+      <div class="modal-head"><h3 id="devTitle">添加网关设备</h3><span class="x" onclick="hide('devMask')">×</span></div>
+      <div class="modal-body">
+        <div class="field"><label>设备名称 *</label>
+          <input id="dName" placeholder="如 1号双釜反应器" /></div>
+        <div class="field"><label>物模型 *</label>
+          <select id="dModel"></select></div>
+        <div class="field"><label>设备图片（选填）</label>
+          <input type="file" id="dImg" accept="image/*" style="padding:9px 12px;height:auto" /></div>
+        <div class="field" style="margin-bottom:8px" id="dCodeField">
+          <div class="lbl-row">
+            <label for="dCode">设备标识码</label>
+            <label class="gchk"><input type="checkbox" id="dAuto" checked /> 自动生成</label>
+          </div>
+          <input id="dCode" placeholder="自动生成" disabled />
+        </div>
+        <p class="hint">标识码就是 MQTT Topic 里的 <span class="mono">{deviceId}</span>。网关序列号出厂写死（如
+          <span class="mono">00110</span>）时取消「自动生成」按实际号填，否则平台订阅的 Topic 和网关发的对不上。
+          创建后网关用 <span class="mono">/api/config/device/{标识码}</span> 拉完整配置。</p>
+        <div class="err" id="dErr" style="margin-top:10px"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="hide('devMask')">取消</button>
+        <button class="btn-save" id="dGo">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 二维码 -->
+  <div class="mask" id="qrMask">
+    <div class="modal">
+      <div class="modal-head"><h3>设备二维码</h3><span class="x" onclick="hide('qrMask')">×</span></div>
+      <div class="modal-body qrwrap">
+        <img class="qrimg" id="qrImg" alt="二维码" />
+        <div class="c" id="qrCode"></div>
+        <p class="hint" id="qrHint">内容即设备标识码（= MQTT deviceId），扫码绑定或烧进网关</p>
+      </div>
+      <div class="modal-foot">
+        <a id="qrDl" download><button class="btn-cancel">下载 PNG</button></a>
+        <button class="btn-save" onclick="hide('qrMask')">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 授权 -->
+  <div class="mask" id="grantMask">
+    <div class="modal">
+      <div class="modal-head"><h3 id="grantTitle">授权</h3><span class="x" onclick="hide('grantMask')">×</span></div>
+      <div class="modal-body">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+          <select class="gsel" id="grantUser"></select>
+          <label class="gchk"><input type="checkbox" id="gMon" checked> 监控</label>
+          <label class="gchk"><input type="checkbox" id="gCtl"> 控制</label>
+          <button class="btn-save" id="grantAdd" style="height:40px">授权</button>
+        </div>
+        <div id="grantList"></div>
+      </div>
+      <div class="modal-foot"><button class="btn-cancel" onclick="hide('grantMask')">关闭</button></div>
+    </div>
+  </div>
+
+<script src="/shell.js"></script>
+<script>
+Shell.mount('gateways');
+
+const esc=Shell.esc, ago=Shell.ago;
+function hide(id){$(id).style.display='none';} function show(id){$(id).style.display='flex';}
+
+let MODELS=[], LIST=[], term='', curDeviceId=null, editId=null;
+
+async function loadModels(){
+  const r=await Shell.guard(await fetch('/admin/models'));
+  MODELS=await r.json();
+  $('dModel').innerHTML=MODELS.length
+    ? MODELS.map(m=>`<option value="${esc(m.productKey)}">${esc(m.modelName||m.productKey)}（${esc(m.productKey)}）</option>`).join('')
+    : `<option value="">还没有物模型</option>`;
+  $('warnBox').innerHTML=MODELS.length?'':
+    `<div class="notice warn" style="margin-top:12px">还没有定义任何物模型。请先到
+      <a href="/models.html">物模型</a> 页面建一个，再回来添加设备。</div>`;
+}
+
+async function loadDevices(){
+  const r=await Shell.guard(await fetch('/admin/mqtt-devices'));
+  LIST=await r.json();
+  render();
+}
+
+function render(){
+  const t=term.toLowerCase();
+  const list=!t?LIST:LIST.filter(d=>
+    (d.name||'').toLowerCase().includes(t)||(d.code||'').toLowerCase().includes(t)||
+    (d.productKey||'').toLowerCase().includes(t)||(d.modelName||'').toLowerCase().includes(t));
+
+  $('empty').style.display=list.length?'none':'';
+  $('empty').textContent=LIST.length?'没有匹配的设备':'还没有网关设备，点右上角「添加设备」';
+
+  $('rows').innerHTML=list.map(d=>{
+    const media=d.hasImage
+      ?`<img class="ac-img" src="/web/devices/${encodeURIComponent(d.code)}/image" alt="" />`
+      :`<span class="ac-ico"></span>`;
+    const model=d.modelName
+      ?`<div class="mdl-name">${esc(d.modelName)}</div><div class="mdl-ver mono">${esc(d.productKey)} · v${esc(d.modelVersion||'')}</div>`
+      :`<span class="chip bad">物模型缺失</span>`;
+    return `<div class="grid t-row">
+      <div class="dev">${media}<div class="dev-text">
+        <div class="dev-name">${esc(d.name)}</div>
+        <div class="dev-code mono">${esc(d.code)}</div></div></div>
+      <div class="col-model mdl">${model}</div>
+      <div><span class="status ${d.online?'on':'off'}"><span class="d"></span>${d.online?'在线':'离线'}</span></div>
+      <div class="col-seen" style="color:var(--text-3);font-size:12.5px">${ago(d.lastSeen)}</div>
+      <div class="acts">
+        <button class="ghost-btn btn-xs" data-panel="${esc(d.code)}">面板</button>
+        <button class="ghost-btn btn-xs" data-qr="${d.id}|${esc(d.code)}">二维码</button>
+        <button class="ghost-btn btn-xs" data-edit="${d.id}">编辑</button>
+        <button class="ghost-btn btn-xs" data-grant="${d.id}|${esc(d.name)}">授权</button>
+        <button class="ghost-btn btn-xs danger" data-del="${d.id}">删除</button>
+      </div></div>`;}).join('');
+}
+
+$('q').oninput=e=>{term=e.target.value.trim();render();};
+
+// ---- 添加 / 编辑 ----
+const CODE_RE=/^[A-Za-z0-9_-]{2,64}$/;
+function syncAutoCode(){
+  const on=$('dAuto').checked;
+  $('dCode').disabled=on;
+  $('dCode').placeholder=on?'自动生成':'如 00110';
+  if(on)$('dCode').value='';
+}
+$('dAuto').addEventListener('change',syncAutoCode);
+
+$('btnAdd').onclick=()=>{
+  if(!MODELS.length){alert('请先到「物模型」页面创建一个物模型');return;}
+  editId=null; $('devTitle').textContent='添加网关设备';
+  $('dName').value=''; $('dImg').value=''; $('dErr').textContent='';
+  $('dModel').selectedIndex=0; $('dModel').disabled=false;
+  $('dAuto').checked=true; syncAutoCode();
+  $('dCodeField').style.display='';          // 标识码只能在新建时定，编辑时藏起来
+  show('devMask');
+};
+$('rows').addEventListener('click', async (e)=>{
+  const b=e.target.closest('button'); if(!b)return;
+  if(b.dataset.panel){ location.href='/panel.html?code='+encodeURIComponent(b.dataset.panel); }
+  else if(b.dataset.qr){ const [id,code]=b.dataset.qr.split('|');
+    $('qrImg').src=`/admin/devices/${id}/qr.png`; $('qrDl').href=`/admin/devices/${id}/qr.png`;
+    $('qrDl').setAttribute('download',code+'.png');
+    $('qrCode').textContent=code; $('qrHint').textContent='正在读取二维码内容…';
+    show('qrMask');
+    await showQrContent(id,code);
+  } else if(b.dataset.edit){ const d=LIST.find(x=>x.id===b.dataset.edit); if(!d)return;
+    editId=d.id; $('devTitle').textContent='编辑设备';
+    $('dName').value=d.name; $('dModel').value=d.productKey||''; $('dImg').value=''; $('dErr').textContent='';
+    $('dCodeField').style.display='none';    // 标识码设备侧已经烧进去了，不给改
+    show('devMask');
+  } else if(b.dataset.grant){ const [id,nm]=b.dataset.grant.split('|');
+    curDeviceId=id; $('grantTitle').textContent='授权 · '+nm; await loadUsers(); await loadGrants(); show('grantMask');
+  } else if(b.dataset.del){ if(!confirm('确定删除该设备？其授权和告警记录会一并清除。'))return;
+    await fetch('/admin/devices/'+b.dataset.del,{method:'DELETE'}); loadDevices(); }
+});
+
+$('dGo').onclick=async()=>{
+  const err=$('dErr'); err.textContent='';
+  if(!$('dName').value.trim()){err.textContent='请填写设备名称';return;}
+  if(!$('dModel').value){err.textContent='请选择物模型';return;}
+  const fd=new FormData();
+  fd.append('name',$('dName').value.trim());
+  fd.append('productKey',$('dModel').value);
+  if($('dImg').files[0])fd.append('image',$('dImg').files[0]);
+  if(!editId && !$('dAuto').checked){
+    const c=$('dCode').value.trim();
+    if(!c){err.textContent='请填写设备标识码，或勾选「自动生成」';return;}
+    if(!CODE_RE.test(c)){err.textContent='标识码只能用字母、数字、下划线、短横线，长度 2-64';return;}
+    fd.append('code',c);
+  }
+
+  const r=editId
+    ? await fetch('/admin/mqtt-devices/'+editId,{method:'PUT',body:fd})
+    : await fetch('/admin/mqtt-devices',{method:'POST',body:fd});
+  if(!r.ok){err.textContent=await Shell.errText(r);return;}
+  const dev=await r.json();
+  hide('devMask'); await loadDevices();
+  if(!editId) alert('设备已创建。\n设备标识码（= MQTT deviceId，请烧进网关）：\n'+dev.code);
+  else Shell.toast('已保存');
+};
+
+// 二维码里写的是标识码还是绑定链接，由后端按物模型 meta.qrCode 决定，前端不猜，问一次
+async function showQrContent(id,fallback){
+  const plain='内容即设备标识码（= MQTT deviceId），扫码绑定或烧进网关';
+  try{
+    const r=await fetch(`/admin/devices/${id}/qr-content`);
+    if(!r.ok){ $('qrHint').textContent=plain; return; }
+    const q=await r.json();
+    $('qrCode').textContent=q.content||fallback;
+    $('qrHint').textContent=q.isUrl
+      ? '内容是绑定链接，微信/系统相机扫码可直接打开；APP 从中取 code 参数即 deviceId'
+      : plain+'（物模型没配 meta.qrCode.urlTemplate，所以退回了纯标识码）';
+  }catch(e){ $('qrHint').textContent=plain; }
+}
+
+// ---- 授权 ----
+async function loadUsers(){ const r=await fetch('/admin/users'); const users=await r.json();
+  $('grantUser').innerHTML=users.map(u=>`<option value="${u.id}">${esc(u.username)}（${esc(u.role)}）</option>`).join(''); }
+async function loadGrants(){ const r=await fetch('/admin/grants?deviceId='+curDeviceId); const list=await r.json();
+  const box=$('grantList');
+  if(!list.length){box.innerHTML='<p class="gempty">暂无授权</p>';return;}
+  box.innerHTML=list.map(g=>`<div class="growrow"><span class="gn">${esc(g.username)}</span>
+    <span class="gp">${g.canMonitor?'监控':''}${g.canControl?' · 控制':''}</span>
+    <span class="grm" data-rg="${g.id}">移除</span></div>`).join('');
+  box.querySelectorAll('[data-rg]').forEach(x=>x.onclick=async()=>{
+    await fetch('/admin/grants/'+x.dataset.rg,{method:'DELETE'}); loadGrants(); }); }
+$('grantAdd').onclick=async()=>{
+  await fetch('/admin/grants',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({userId:$('grantUser').value,deviceId:curDeviceId,
+      canMonitor:$('gMon').checked,canControl:$('gCtl').checked})});
+  loadGrants(); };
+
+async function loadMqttPill(){
+  try{
+    const r=await fetch('/admin/mqtt-status'); if(!r.ok)return;
+    const d=await r.json();
+    const p=$('mqttPill');
+    p.className='chip '+(d.enabled?(d.connected?'ok':'bad'):'');
+    p.textContent=d.enabled?`MQTT ${d.connected?'已连接':'未连接'}`:'MQTT 未启用（appsettings 里 Mqtt:Enabled）';
+  }catch{}
+}
+
+(async()=>{ await loadModels(); await loadDevices(); loadMqttPill(); setInterval(loadDevices,10000); })().catch(()=>{});
+</script>
+</body>
+</html>

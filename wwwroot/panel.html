@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>设备面板 · MaxChemical</title>
+  <link rel="stylesheet" href="/shell.css" />
+  <style>
+    /* 嵌在设备总览页的控制弹窗里时不显示外壳，只铺内容 */
+    body.embedded{display:block;height:auto;overflow:auto;background:#fff}
+    body.embedded #shMainStandalone{padding:22px 26px}
+
+    .dev-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+    .dev-head .nm{font-size:20px;font-weight:700;letter-spacing:-.01em}
+    .dev-head .sub{font-size:11.5px;color:var(--text-3);margin-top:3px}
+    .dev-head .sp{flex:1}
+
+    .grp{margin-top:26px}
+    .grp-h{font-size:12px;color:var(--text-3);font-weight:600;letter-spacing:.06em;margin-bottom:12px;
+      display:flex;align-items:center;gap:10px}
+    .grp-h:after{content:'';flex:1;height:1px;background:var(--line)}
+    .widgets{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:13px}
+
+    .w{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+    .w .lb{font-size:12px;color:var(--text-3);margin-bottom:7px}
+    .w .vl{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums}
+    .w .un{font-size:13px;color:var(--text-3);margin-left:4px;font-weight:500}
+    .w .ts{font-size:11px;color:var(--text-3);margin-top:8px}
+    .w.stale{opacity:.45}
+    .bar{height:6px;background:var(--bg-soft);border-radius:99px;overflow:hidden;margin-top:11px}
+    .bar i{display:block;height:100%;border-radius:99px;transition:width .4s}
+    .lite{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:600;margin-top:2px}
+    .lite .d{width:10px;height:10px;border-radius:50%;flex:none}
+    .sv{font-size:12px;color:var(--text-3);margin-top:6px}
+    .sw{display:flex;align-items:center;gap:12px;margin-top:4px}
+    .track{width:50px;height:29px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;
+      transition:background .18s;flex:none}
+    .track i{position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;background:#fff;
+      box-shadow:0 1px 4px rgba(0,0,0,.22);transition:transform .18s}
+    .track.on i{transform:translateX(21px)}
+    .track.busy{opacity:.55;pointer-events:none}
+    .wtbl{width:100%;border-collapse:collapse;margin-top:4px}
+    .wtbl td{padding:7px 0;border:none;font-size:13px}
+    .wtbl td:first-child{color:var(--text-3)}
+    .wtbl td:last-child{text-align:right}
+
+    .cmds{display:grid;grid-template-columns:repeat(auto-fill,minmax(276px,1fr));gap:13px}
+    .cmd{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+    .cmd .nm{font-size:14px;font-weight:600;margin-bottom:12px}
+    .cmd .row{margin-bottom:10px}
+    .cmd label{font-size:12px;color:var(--text-2);font-weight:600;display:block;margin-bottom:5px}
+    .cmd .go{width:100%;height:40px}
+    .fb{font-size:12.5px;margin-top:9px;min-height:16px}
+    .fb.ok{color:var(--ok)} .fb.bad{color:var(--danger)} .fb.pending{color:var(--text-3)}
+
+    .alarm{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line-2);font-size:13.5px}
+    .alarm:last-child{border-bottom:none}
+    .alarm .lv{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;flex:none;margin-top:2px}
+    .alarm .lv.error{color:#fff;background:var(--danger)}
+    .alarm .lv.alert{color:var(--danger);background:var(--danger-bg)}
+    .alarm .lv.warn{color:var(--warn);background:var(--warn-bg)}
+    .alarm .lv.info{color:var(--text-2);background:var(--bg-head)}
+    .alarm .tm{color:var(--text-3);font-size:12px;flex:none}
+  </style>
+</head>
+<body>
+  <div id="shell-mount"></div>
+  <template id="page-content">
+    <div id="shMainStandalone">
+      <div class="dev-head">
+        <a class="ghost-btn btn-xs" href="/gateways.html" id="backBtn">← 返回</a>
+        <div>
+          <div class="nm" id="devName">设备面板</div>
+          <div class="sub mono" id="devSub">加载中…</div>
+        </div>
+        <div class="sp"></div>
+        <span class="status off" id="onlineBadge"><span class="d"></span>—</span>
+      </div>
+      <div id="offNote"></div>
+      <div id="body"></div>
+      <div style="height:40px"></div>
+    </div>
+  </template>
+
+<script src="/shell.js"></script>
+<script>
+// 嵌在控制弹窗的 iframe 里时不挂外壳，只铺内容 —— 弹窗自己有深色标题栏
+const EMBEDDED = window.self !== window.top;
+if (EMBEDDED) {
+  document.body.classList.add('embedded');
+  const host=$('shell-mount'), tpl=$('page-content');
+  host.outerHTML = tpl.innerHTML;
+  const bk=$('backBtn'); if(bk) bk.style.display='none';
+} else {
+  Shell.mount('gateways');
+}
+
+const esc=Shell.esc, ago=Shell.ago;
+const CODE=new URLSearchParams(location.search).get('code')||'';
+let CFG=null, FIELDS={}, CMDS={}, VALUES={}, CANCTL=false, POLL=null;
+
+function fmt(v,dec){
+  if(v==null)return '—';
+  if(typeof v==='boolean')return v?'1':'0';
+  if(typeof v==='number')return dec==null?String(v):v.toFixed(dec);
+  return String(v);
+}
+/** 按 zones 配置给当前值挑颜色 */
+function zoneColor(zones,v){
+  if(!Array.isArray(zones)||typeof v!=='number')return null;
+  for(const z of zones) if(v>=(z.min??-Infinity)&&v<=(z.max??Infinity))return z.color;
+  return null;
+}
+
+async function boot(){
+  if(!CODE){ $('body').innerHTML='<div class="empty">缺少设备标识码</div>'; return; }
+
+  // 1) 找到这台设备(顺便拿到 productKey 和控制权限)
+  const r=await fetch('/web/devices');
+  if(r.status===401){location.href='/login.html?next='+encodeURIComponent(location.pathname+location.search);return;}
+  const dev=(await r.json()).find(d=>d.code===CODE);
+  if(!dev){ $('body').innerHTML='<div class="empty">设备不存在，或你没有它的访问权限</div>'; return; }
+  CANCTL=!!dev.canControl;
+  $('devName').textContent=dev.name;
+  $('devSub').textContent=CODE+(dev.productKey?' · '+dev.productKey:'');
+
+  if(dev.accessMode!=='Mqtt'){
+    $('body').innerHTML=`<div class="empty">这台是<b>透传模式</b>设备，请到
+      <a href="/" style="color:var(--accent)">设备总览</a> 用它对应的专属面板打开。</div>`;
+    return;
+  }
+  if(!dev.productKey){ $('body').innerHTML='<div class="empty">该设备没有绑定物模型</div>'; return; }
+
+  // 2) 拉物模型 —— 界面完全按它渲染
+  const mr=await fetch('/web/models/'+encodeURIComponent(dev.productKey));
+  if(!mr.ok){ $('body').innerHTML='<div class="empty">物模型加载失败</div>'; return; }
+  const model=await mr.json();
+  CFG=model.config||{};
+  $('devSub').textContent=`${CODE} · ${model.productKey} · ${model.modelName} v${model.modelVersion}`;
+  (CFG.dataFields||[]).forEach(f=>FIELDS[f.identifier]=f);
+  (CFG.serviceCommands||[]).forEach(c=>CMDS[c.identifier]=c);
+
+  renderShell();
+  await tick();
+  POLL=setInterval(tick,2000);
+  loadAlarms();
+}
+
+function renderShell(){
+  const groups=(CFG.display?.groups||[]).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  const cgroups=(CFG.commands?.groups||[]).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  let h='';
+
+  if(!groups.length&&!cgroups.length)
+    h+=`<div class="empty">这个物模型还没有配置 APP 界面。到
+      <a href="/models.html" style="color:var(--accent)">物模型</a> 页面点「按数据契约自动生成」就能一键铺一套。</div>`;
+
+  groups.forEach((g,gi)=>{
+    h+=`<div class="grp"><div class="grp-h">${esc(g.groupName||g.groupId||'数据')}</div><div class="widgets">
+      ${(g.fields||[]).map((f,fi)=>`<div class="w" id="w_${gi}_${fi}"></div>`).join('')}</div></div>`;
+  });
+  cgroups.forEach((g,gi)=>{
+    h+=`<div class="grp"><div class="grp-h">${esc(g.groupName||g.groupId||'控制')}</div><div class="cmds">
+      ${(g.items||[]).map((it,ii)=>cmdHtml(it,gi,ii)).join('')}</div></div>`;
+  });
+
+  h+=`<div class="grp"><div class="grp-h">告警记录</div><div id="alarmBox"><div class="blank">加载中…</div></div></div>`;
+  $('body').innerHTML=h;
+  bindCommands();
+}
+
+// ---------- 数据控件 ----------
+function paintWidgets(){
+  const groups=(CFG.display?.groups||[]).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  groups.forEach((g,gi)=>(g.fields||[]).forEach((f,fi)=>{
+    const el=$(`w_${gi}_${fi}`); if(!el)return;
+    el.innerHTML=widgetHtml(f);
+    el.classList.toggle('stale', f.identifier&&!f.identifier.startsWith('_')&&VALUES[f.identifier]===undefined);
+  }));
+  bindSwitches();
+}
+function widgetHtml(f){
+  const c=f.config||{}, id=f.identifier, def=FIELDS[id]||{};
+  const v=VALUES[id];
+  const label=esc(f.displayName||def.name||id||'');
+  const unit=c.suffix||def.unit||'';
+  const dec=c.decimal!=null?c.decimal:undefined;
+
+  switch(f.widgetType){
+    case 'statusLight':{
+      const map=c.mapping||{};
+      const m=map[String(v)]||{label:(def.options||{})[String(v)]||(v==null?'—':String(v)),color:'#8b919b'};
+      return `<div class="lb">${label}</div><div class="lite"><span class="d" style="background:${esc(m.color||'#8b919b')}"></span>${esc(m.label)}</div>`;
+    }
+    case 'switch':{
+      const on=v===1||v===true||v==='1';
+      const dis=!CANCTL?' style="opacity:.45;pointer-events:none"':'';
+      return `<div class="lb">${label}</div><div class="sw">
+        <div class="track ${on?'on':''}" data-sw="${esc(id)}" data-svc="${esc(c.serviceIdentifier||'')}"
+          data-in="${esc(c.inputIdentifier||'')}" data-cfm="${esc(c.confirmMessage||'')}"
+          style="background:${on?esc(c.onColor||'#1f7a4d'):'var(--line)'}"${dis}><i></i></div>
+        <span style="font-size:13.5px;font-weight:500">${esc(on?(c.onLabel||'开启'):(c.offLabel||'关闭'))}</span></div>
+        ${!CANCTL?'<div class="ts">无控制权限</div>':''}`;
+    }
+    case 'progressBar':{
+      const min=c.min??def.min??0, max=c.max??def.max??100;
+      const pct=typeof v==='number'?Math.max(0,Math.min(100,(v-min)/(max-min)*100)):0;
+      const col=zoneColor(c.zones,v)||'var(--accent)';
+      return `<div class="lb">${label}</div><div class="vl">${fmt(v,dec)}<span class="un">${esc(unit)}</span></div>
+        <div class="bar"><i style="width:${pct}%;background:${esc(col)}"></i></div>`;
+    }
+    case 'pvSvGauge':{
+      const pv=VALUES[c.pvIdentifier||id], sv=VALUES[c.svIdentifier];
+      const min=c.min??def.min??0, max=c.max??def.max??100;
+      const pct=typeof pv==='number'?Math.max(0,Math.min(100,(pv-min)/(max-min)*100)):0;
+      const col=zoneColor(c.zones,pv)||'var(--accent)';
+      return `<div class="lb">${label}${c.pvLabel?' · '+esc(c.pvLabel):''}</div>
+        <div class="vl" style="color:${esc(col)}">${fmt(pv,dec)}<span class="un">${esc(unit)}</span></div>
+        <div class="bar"><i style="width:${pct}%;background:${esc(col)}"></i></div>
+        <div class="sv">${esc(c.svLabel||'设定')} ${fmt(sv,dec)}${esc(unit)}</div>`;
+    }
+    case 'gauge':{
+      const min=c.min??def.min??0, max=c.max??def.max??100;
+      const pct=typeof v==='number'?Math.max(0,Math.min(100,(v-min)/(max-min)*100)):0;
+      const col=zoneColor(c.zones,v)||'var(--accent)';
+      return `<div class="lb">${label}</div>
+        <div class="vl" style="color:${esc(col)}">${fmt(v,dec)}<span class="un">${esc(unit)}</span></div>
+        <div class="bar"><i style="width:${pct}%;background:${esc(col)}"></i></div>
+        <div class="ts">${min} ~ ${max}${esc(unit)}</div>`;
+    }
+    case 'table':{
+      return `<div class="lb">${label}</div><table class="wtbl">
+        ${(c.rows||[]).map(r=>{
+          const rv=VALUES[r.identifier];
+          const m=(r.mapping||{})[String(rv)];
+          const cell=r.displayType==='statusLight'&&m
+            ? `<span class="lite" style="font-size:13px;justify-content:flex-end"><span class="d" style="width:8px;height:8px;background:${esc(m.color)}"></span>${esc(m.label)}</span>`
+            : esc(fmt(rv));
+          return `<tr><td>${esc(r.label||r.identifier)}</td><td>${cell}</td></tr>`;}).join('')}
+      </table>`;
+    }
+    case 'text':
+      return `<div class="lb">${label}</div><div style="font-size:15px;font-weight:600;margin-top:2px">${esc(fmt(v))}</div>`;
+    default:{  // number
+      const col=zoneColor(c.zones,v);
+      return `<div class="lb">${label}</div>
+        <div class="vl"${col?` style="color:${esc(col)}"`:''}>${fmt(v,dec)}<span class="un">${esc(unit)}</span></div>`;
+    }
+  }
+}
+function bindSwitches(){
+  document.querySelectorAll('[data-sw]').forEach(el=>{
+    el.onclick=async()=>{
+      const svc=el.dataset.svc; if(!svc){alert('这个开关没有绑定控制指令');return;}
+      const on=el.classList.contains('on');
+      if(!confirm(el.dataset.cfm||`确认切换${el.dataset.sw}？`))return;
+      el.classList.add('busy');
+      const params={}; if(el.dataset.in)params[el.dataset.in]=on?0:1;
+      const r=await send(svc,params);
+      el.classList.remove('busy');
+      if(!r.ok)alert(r.msg);
+      setTimeout(tick,600);
+    };
+  });
+}
+
+// ---------- 指令控件 ----------
+function cmdHtml(it,gi,ii){
+  const c=it.config||{}, def=CMDS[it.serviceIdentifier]||{};
+  const ins=it.inputFields||[];
+  const cls=c.style==='danger'?'btn-save go':(c.style==='primary'?'btn-save go':'btn-cancel go');
+  const st=c.style==='danger'?' style="background:var(--danger)"':'';
+  return `<div class="cmd" data-cg="${gi}" data-ci="${ii}">
+    <div class="nm">${esc(it.displayName||def.name||it.serviceIdentifier)}</div>
+    ${ins.map(f=>inputHtml(f,it.serviceIdentifier)).join('')}
+    <button class="${cls}"${st} data-run="${esc(it.serviceIdentifier)}" data-cfm="${c.confirmRequired?'1':''}"
+      data-msg="${esc(c.confirmMessage||'')}" ${CANCTL?'':'disabled'}>
+      ${esc(c.submitText||it.displayName||'执行')}</button>
+    <div class="fb" data-fb="${esc(it.serviceIdentifier)}">${CANCTL?'':'无控制权限'}</div>
+  </div>`;
+}
+function inputHtml(f,svc){
+  const c=f.config||{}, key=`${svc}::${f.identifier}`;
+  const lab=esc(f.label||f.identifier);
+  if(f.widgetType==='select'){
+    return `<div class="row"><label>${lab}</label><select class="inp" data-in="${esc(key)}">
+      ${(c.options||[]).map(o=>`<option value="${esc(o.value)}" ${String(c.defaultValue)===String(o.value)?'selected':''}>${esc(o.label)}</option>`).join('')}
+    </select></div>`;
+  }
+  if(f.widgetType==='slider'){
+    return `<div class="row"><label>${lab}<span style="float:right;font-variant-numeric:tabular-nums;font-weight:500"
+      id="sv_${esc(key)}">${c.defaultValue??c.min??0}${esc(c.suffix||'')}</span></label>
+      <input type="range" style="width:100%;accent-color:var(--accent)" data-in="${esc(key)}"
+        min="${c.min??0}" max="${c.max??100}" step="${c.step??1}" value="${c.defaultValue??c.min??0}"
+        oninput="document.getElementById('sv_${esc(key)}').textContent=this.value+'${esc(c.suffix||'')}'"/></div>`;
+  }
+  return `<div class="row"><label>${lab}${c.suffix?' ('+esc(c.suffix)+')':''}</label>
+    <input class="inp" type="number" step="${c.step??'any'}" data-in="${esc(key)}"
+      ${c.min!=null?`min="${c.min}"`:''} ${c.max!=null?`max="${c.max}"`:''}
+      value="${c.defaultValue??''}" placeholder="${esc(c.placeholder||'')}"/></div>`;
+}
+function bindCommands(){
+  document.querySelectorAll('[data-run]').forEach(b=>{
+    b.onclick=async()=>{
+      const svc=b.dataset.run;
+      if(b.dataset.cfm&&!confirm(b.dataset.msg||`确认执行「${svc}」？`))return;
+      const card=b.closest('.cmd'), fb=card.querySelector('[data-fb]');
+      const params={};
+      card.querySelectorAll('[data-in]').forEach(i=>{
+        const key=i.dataset.in.split('::')[1];
+        const raw=i.value;
+        if(raw==='')return;
+        const n=Number(raw); params[key]=isNaN(n)?raw:n;
+      });
+      b.disabled=true; fb.className='fb pending'; fb.textContent='指令发送中…';
+      const r=await send(svc,params);
+      b.disabled=false;
+      fb.className='fb '+(r.ok?'ok':'bad');
+      fb.textContent=r.msg;
+      setTimeout(()=>{ if(fb.textContent===r.msg){fb.textContent='';fb.className='fb';} },5000);
+      setTimeout(tick,600);
+    };
+  });
+}
+async function send(command,params){
+  try{
+    const r=await fetch(`/web/devices/${encodeURIComponent(CODE)}/command`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command,params})});
+    if(r.ok)return {ok:true,msg:'执行成功'};
+    const d=await r.json().catch(()=>({}));
+    return {ok:false,msg:d.error||`执行失败 (${r.status})`};
+  }catch(e){ return {ok:false,msg:'网络错误：'+e.message}; }
+}
+
+// ---------- 轮询 ----------
+async function tick(){
+  try{
+    const r=await fetch(`/web/mqtt/devices/${encodeURIComponent(CODE)}/telemetry`);
+    if(!r.ok)return;
+    const d=await r.json();
+    VALUES=d.values||{};
+    const b=$('onlineBadge');
+    b.className='status '+(d.online?'on':'off');
+    b.innerHTML=`<span class="d"></span>${d.online?'在线':'离线'}`+(d.lastSeen?` · ${ago(d.lastSeen)}`:'');
+    $('offNote').innerHTML=(!d.online&&d.note)?`<div class="notice warn" style="margin-top:14px">${esc(d.note)}</div>`
+      :(!d.online?`<div class="notice warn" style="margin-top:14px">设备当前离线，下面显示的是最后一次上报的数据。</div>`:'');
+    paintWidgets();
+  }catch{}
+}
+async function loadAlarms(){
+  try{
+    const r=await fetch(`/web/devices/${encodeURIComponent(CODE)}/alarms?take=20`);
+    const box=$('alarmBox'); if(!box)return;
+    if(!r.ok){box.innerHTML='<div class="blank">告警加载失败</div>';return;}
+    const list=await r.json();
+    if(!list.length){box.innerHTML='<div class="blank">暂无告警记录</div>';return;}
+    const evs={}; (CFG.alarmEvents||[]).forEach(e=>evs[e.identifier]=e);
+    box.innerHTML=`<div class="panel panel-pad">`+list.map(a=>{
+      const ev=evs[a.event]||{};
+      const ps=Object.entries(a.parameters||{}).map(([k,v])=>{
+        const pd=(ev.params||[]).find(p=>p.identifier===k)||{};
+        const shown=pd.options&&pd.options[String(v)]?pd.options[String(v)]:v;
+        return `${esc(pd.name||k)}: ${esc(shown)}${esc(pd.unit||'')}`;
+      }).join(' · ');
+      return `<div class="alarm"><span class="lv ${esc(a.level||'alert')}">${esc(a.level||'alert')}</span>
+        <div style="flex:1"><div style="font-weight:600">${esc(ev.name||a.event)}</div>
+          <div style="color:var(--text-3);font-size:12.5px;margin-top:2px">${ps||'—'}</div></div>
+        <span class="tm">${new Date(a.timestamp||a.createdAt).toLocaleString('zh-CN')}</span></div>`;
+    }).join('')+`</div>`;
+  }catch{}
+}
+setInterval(loadAlarms,30000);
+
+window.addEventListener('beforeunload',()=>{if(POLL)clearInterval(POLL);});
+boot().catch(e=>{ $('body').innerHTML='<div class="empty">加载失败：'+esc(e.message)+'</div>'; });
+</script>
+</body>
+</html>

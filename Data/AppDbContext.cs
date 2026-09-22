@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MaxChemical.DtuServer.Data
 {
-    /// <summary>平台数据(SQLite 单文件持久化):用户、设备、授权关系。</summary>
+    /// <summary>平台数据(SQLite 单文件持久化):用户、设备、授权关系、物模型、告警。</summary>
     public class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
@@ -10,6 +10,8 @@ namespace MaxChemical.DtuServer.Data
         public DbSet<User> Users => Set<User>();
         public DbSet<Device> Devices => Set<Device>();
         public DbSet<Grant> Grants => Set<Grant>();
+        public DbSet<ProductModel> ProductModels => Set<ProductModel>();
+        public DbSet<DeviceAlarm> DeviceAlarms => Set<DeviceAlarm>();
 
         protected override void OnModelCreating(ModelBuilder b)
         {
@@ -30,6 +32,18 @@ namespace MaxChemical.DtuServer.Data
             {
                 e.HasKey(x => x.Id);
                 e.HasIndex(x => new { x.UserId, x.DeviceId }).IsUnique();
+            });
+
+            b.Entity<ProductModel>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.HasIndex(x => x.ProductKey).IsUnique();
+            });
+
+            b.Entity<DeviceAlarm>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.HasIndex(x => new { x.DeviceCode, x.CreatedAt });
             });
         }
     }
