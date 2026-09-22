@@ -26,6 +26,13 @@ TimeoutStopSec=30
 
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+# ★ HOME 必须设。ASP.NET Core 的 Data Protection 密钥（用来加密登录 Cookie）
+#   默认存在 $HOME/.aspnet/DataProtection-Keys。服务账号是 --no-create-home 建的，
+#   systemd 下 HOME 是空的 → 密钥只存在内存里 → 每次重启所有人被强制登出。
+#   指到可写且持久的 /var/lib/dtuserver，重启就不掉登录了。
+Environment=HOME=/var/lib/dtuserver
+
 # 日志直接进 journald（UseSystemd 会把级别映射成 journald 优先级，journalctl -p err 才好使）
 SyslogIdentifier=dtuserver
 
